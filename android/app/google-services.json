@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "800541292018",
+    "project_id": "wevo-22275",
+    "storage_bucket": "wevo-22275.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:800541292018:android:405e5068a02134433d676b",
+        "android_client_info": {
+          "package_name": "com.nemis.nemis_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA2KHPZ7WvnIqDC8Phi5flCCmRuQmqavkE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
