@@ -77,10 +77,13 @@ const _messages = <WevoErrorCode, String>{
   WevoErrorCode.authOperationNotAllowed: 'Registrazione non abilitata. Contatta il supporto.',
   WevoErrorCode.authTooManyRequests    : 'Troppi tentativi. Riprova tra qualche minuto.',
   WevoErrorCode.authNetworkFailed      : 'Connessione assente. Controlla internet.',
-  WevoErrorCode.authUsernameNotFound   : 'Nessun account trovato con questo nome.',
+  WevoErrorCode.authUsernameNotFound   : 'Nessun account trovato con questo username.',
+  WevoErrorCode.authUsernameAlreadyInUse: 'Questo username è già in uso.',
 
   // Validazione
   WevoErrorCode.validationNameEmpty      : 'Inserisci il tuo nome.',
+  WevoErrorCode.validationUsernameEmpty  : 'Inserisci uno username.',
+  WevoErrorCode.validationUsernameTooShort: 'Lo username deve avere almeno 3 caratteri.',
   WevoErrorCode.validationAgeTooYoung    : 'Devi avere almeno 18 anni per usare Wevo.',
   WevoErrorCode.validationAgeInvalid     : 'Inserisci un\'età valida.',
   WevoErrorCode.validationEmailEmpty     : 'Inserisci un\'email.',

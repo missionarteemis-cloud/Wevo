@@ -14,27 +14,42 @@ class AuthService {
     required String email,
     required String password,
     required String name,
+    required String username,
     required int age,
   }) async {
     try {
+      final normalizedUsername = _normalizeUsername(username);
+      final exists = await _usernameExists(normalizedUsername);
+      if (exists) {
+        return AppError.validation(WevoErrorCode.authUsernameAlreadyInUse);
+      }
+
       final cred = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
       await _db.collection('users').doc(cred.user!.uid).set({
-        'uid'       : cred.user!.uid,
-        'name'      : name,
-        'age'       : age,
-        'email'     : email,
-        'bio'       : '',
-        'interests' : [],
-        'photoUrl'  : '',
-        'coverUrl'  : '',
-        'discordTag': null,
-        'hasNetflix': false,
-        'createdAt' : FieldValue.serverTimestamp(),
-        'likedBy'   : [],
-        'matches'   : [],
+        'uid'          : cred.user!.uid,
+        'name'         : name,
+        'username'     : normalizedUsername,
+        'age'          : age,
+        'email'        : email,
+        'bio'          : '',
+        'interests'    : [],
+        'favoriteGames': [],
+        'platforms'    : [],
+        'lookingFor'   : [],
+        'photoUrl'     : '',
+        'coverUrl'     : '',
+        'discordTag'   : null,
+        'steamId'      : null,
+        'spotifyArtist': null,
+        'riotId'       : null,
+        'timezone'     : 'CET',
+        'country'      : 'Italia',
+        'createdAt'    : FieldValue.serverTimestamp(),
+        'likedBy'      : [],
+        'matches'      : [],
       });
       return null;
     } on FirebaseAuthException catch (e) {
@@ -51,23 +66,65 @@ class AuthService {
     try {
       String email = emailOrName.trim();
 
-      // Se non contiene @ lo trattiamo come nome utente
       if (!email.contains('@')) {
-        final query = await _db
+        final normalizedUsername = _normalizeUsername(email);
+        final usernameQuery = await _db
             .collection('users')
-            .where('name', isEqualTo: email)
+            .where('username', isEqualTo: normalizedUsername)
             .limit(1)
             .get();
-        if (query.docs.isEmpty) {
-          return AppError.validation(WevoErrorCode.authUsernameNotFound);
+
+        if (usernameQuery.docs.isNotEmpty) {
+          email = usernameQuery.docs.first.data()['email'] as String;
+        } else {
+          final legacyNameQuery = await _db
+              .collection('users')
+              .where('name', isEqualTo: email)
+              .limit(1)
+              .get();
+          if (legacyNameQuery.docs.isEmpty) {
+            return AppError.validation(WevoErrorCode.authUsernameNotFound);
+          }
+          email = legacyNameQuery.docs.first.data()['email'] as String;
         }
-        email = query.docs.first.data()['email'] as String;
       }
 
+      await _auth.setPersistence(Persistence.LOCAL);
       await _auth.signInWithEmailAndPassword(email: email, password: password);
       return null;
     } on FirebaseAuthException catch (e) {
       return AppError.fromFirebaseAuth(e.code);
+    } catch (e) {
+      return AppError.unknown(e);
+    }
+  }
+
+  static Future<AppError?> ensureDevAccount() async {
+    const email = 'demo@wevo.app';
+    const password = 'wevo1234';
+    const username = 'wevo_demo';
+
+    try {
+      final loginError = await login(emailOrName: email, password: password);
+      if (loginError == null) return null;
+
+      if (loginError.code == WevoErrorCode.authUserNotFound ||
+          loginError.code == WevoErrorCode.authInvalidCredential) {
+        final registerError = await register(
+          email: email,
+          password: password,
+          name: 'Wevo Demo',
+          username: username,
+          age: 24,
+        );
+        if (registerError != null &&
+            registerError.code != WevoErrorCode.authEmailAlreadyInUse) {
+          return registerError;
+        }
+        return await login(emailOrName: email, password: password);
+      }
+
+      return loginError;
     } catch (e) {
       return AppError.unknown(e);
     }
@@ -78,16 +135,33 @@ class AuthService {
   // Validazione locale prima di chiamare Firebase
   static AppError? validateRegistration({
     required String name,
+    required String username,
     required String ageText,
     required String email,
     required String password,
   }) {
     if (name.trim().isEmpty) return AppError.validation(WevoErrorCode.validationNameEmpty);
+    if (username.trim().isEmpty) return AppError.validation(WevoErrorCode.validationUsernameEmpty);
+    if (_normalizeUsername(username).length < 3) {
+      return AppError.validation(WevoErrorCode.validationUsernameTooShort);
+    }
     final age = int.tryParse(ageText.trim());
     if (age == null) return AppError.validation(WevoErrorCode.validationAgeInvalid);
     if (age < 18)    return AppError.validation(WevoErrorCode.validationAgeTooYoung);
     if (email.trim().isEmpty) return AppError.validation(WevoErrorCode.validationEmailEmpty);
     if (password.length < 6)  return AppError.validation(WevoErrorCode.validationPasswordTooShort);
     return null;
+  }
+
+  static String _normalizeUsername(String input) =>
+      input.trim().toLowerCase().replaceAll(' ', '_');
+
+  static Future<bool> _usernameExists(String username) async {
+    final query = await _db
+        .collection('users')
+        .where('username', isEqualTo: username)
+        .limit(1)
+        .get();
+    return query.docs.isNotEmpty;
   }
 }

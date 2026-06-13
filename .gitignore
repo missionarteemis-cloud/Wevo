@@ -25,3 +25,17 @@ ios/Flutter/Flutter.podspec
 
 # Logs
 *.log
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+*.env
+
+# IDE
+.idea/
+
+# OS
+Thumbs.db
+

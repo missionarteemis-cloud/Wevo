@@ -12,9 +12,12 @@ enum WevoErrorCode {
 
   // ── Auth aggiuntivi ───────────────────────────
   authUsernameNotFound,
+  authUsernameAlreadyInUse,
 
   // ── Validazione form ─────────────────────────
   validationNameEmpty,
+  validationUsernameEmpty,
+  validationUsernameTooShort,
   validationAgeTooYoung,
   validationAgeInvalid,
   validationEmailEmpty,

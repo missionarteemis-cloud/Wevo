@@ -23,20 +23,29 @@ class UserService {
 
       if (!doc.exists || doc.data() == null) {
         debugPrint('[UserService] documento non trovato, lo creo');
+        final fallbackName = authUser.displayName ?? authUser.email?.split('@').first ?? 'Utente';
         final data = <String, dynamic>{
-          'uid'       : authUser.uid,
-          'name'      : authUser.displayName ?? authUser.email?.split('@').first ?? 'Utente',
-          'age'       : 0,
-          'email'     : authUser.email ?? '',
-          'bio'       : '',
-          'interests' : [],
-          'photoUrl'  : '',
-          'coverUrl'  : '',
-          'discordTag': null,
-          'hasNetflix': false,
-          'createdAt' : FieldValue.serverTimestamp(),
-          'likedBy'   : [],
-          'matches'   : [],
+          'uid'          : authUser.uid,
+          'name'         : fallbackName,
+          'username'     : fallbackName.toLowerCase().replaceAll(' ', '_'),
+          'age'          : 0,
+          'email'        : authUser.email ?? '',
+          'bio'          : '',
+          'interests'    : [],
+          'favoriteGames': [],
+          'platforms'    : [],
+          'lookingFor'   : [],
+          'photoUrl'     : '',
+          'coverUrl'     : '',
+          'discordTag'   : null,
+          'steamId'      : null,
+          'spotifyArtist': null,
+          'riotId'       : null,
+          'timezone'     : 'CET',
+          'country'      : 'Italia',
+          'createdAt'    : FieldValue.serverTimestamp(),
+          'likedBy'      : [],
+          'matches'      : [],
         };
         await _db.collection('users').doc(authUser.uid).set(data)
             .timeout(const Duration(seconds: 15));
@@ -69,15 +78,33 @@ class UserService {
   static Future<AppError?> updateProfile({
     required String bio,
     required List<String> interests,
+    required List<String> favoriteGames,
+    required List<String> platforms,
+    required List<String> lookingFor,
     required int age,
+    String? discordTag,
+    String? steamId,
+    String? spotifyArtist,
+    String? riotId,
+    String? timezone,
+    String? country,
     String? photoUrl,
     String? coverUrl,
   }) async {
     try {
       final updates = <String, dynamic>{
-        'bio'      : bio.trim(),
-        'interests': interests,
-        'age'      : age,
+        'bio'          : bio.trim(),
+        'interests'    : interests,
+        'favoriteGames': favoriteGames,
+        'platforms'    : platforms,
+        'lookingFor'   : lookingFor,
+        'age'          : age,
+        'discordTag'   : _normalize(discordTag),
+        'steamId'      : _normalize(steamId),
+        'spotifyArtist': _normalize(spotifyArtist),
+        'riotId'       : _normalize(riotId),
+        'timezone'     : timezone?.trim().isNotEmpty == true ? timezone!.trim() : 'CET',
+        'country'      : country?.trim().isNotEmpty == true ? country!.trim() : 'Italia',
       };
       if (photoUrl != null) updates['photoUrl'] = photoUrl;
       if (coverUrl  != null) updates['coverUrl']  = coverUrl;
@@ -112,4 +139,11 @@ class UserService {
       return [];
     }
   }
+}
+
+
+String? _normalize(String? value) {
+  if (value == null) return null;
+  final v = value.trim();
+  return v.isEmpty ? null : v;
 }

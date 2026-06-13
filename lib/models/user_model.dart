@@ -1,27 +1,42 @@
 class UserModel {
   final String id;
   final String name;
+  final String username;
   final int age;
   final String bio;
-  final String photoUrl;   // foto profilo (cerchio)
-  final String coverUrl;   // immagine di copertina (banner)
+  final String photoUrl;
+  final String coverUrl;
   final List<String> interests;
+  final List<String> favoriteGames;
+  final List<String> platforms;
+  final List<String> lookingFor;
   final String? discordTag;
-  final bool hasNetflix;
+  final String? steamId;
+  final String? spotifyArtist;
+  final String? riotId;
+  final String timezone;
+  final String country;
 
   const UserModel({
     required this.id,
     required this.name,
+    required this.username,
     required this.age,
     required this.bio,
     required this.photoUrl,
     this.coverUrl = '',
     required this.interests,
+    this.favoriteGames = const [],
+    this.platforms = const [],
+    this.lookingFor = const [],
     this.discordTag,
-    this.hasNetflix = false,
+    this.steamId,
+    this.spotifyArtist,
+    this.riotId,
+    this.timezone = '',
+    this.country = '',
   });
 
-  // Compatibilità con il vecchio campo imageUrl usato nelle card discover
   String get imageUrl => coverUrl.isNotEmpty ? coverUrl : photoUrl;
 
   factory UserModel.fromFirestore(Map<String, dynamic> data, String id) {
@@ -30,46 +45,145 @@ class UserModel {
     return UserModel(
       id: id,
       name: data['name'] ?? '',
+      username: data['username'] ?? data['name'] ?? '',
       age: ((data['age'] as num?)?.toInt() ?? 0).clamp(0, 120),
       bio: data['bio'] ?? '',
       photoUrl: photo.isNotEmpty ? photo : 'https://picsum.photos/seed/${id}p/200/200',
       coverUrl: cover.isNotEmpty ? cover : 'https://picsum.photos/seed/${id}c/600/400',
       interests: List<String>.from(data['interests'] ?? []),
+      favoriteGames: List<String>.from(data['favoriteGames'] ?? []),
+      platforms: List<String>.from(data['platforms'] ?? []),
+      lookingFor: List<String>.from(data['lookingFor'] ?? []),
       discordTag: data['discordTag'] as String?,
-      hasNetflix: data['hasNetflix'] ?? false,
+      steamId: data['steamId'] as String?,
+      spotifyArtist: data['spotifyArtist'] as String?,
+      riotId: data['riotId'] as String?,
+      timezone: data['timezone'] ?? '',
+      country: data['country'] ?? '',
     );
   }
 }
 
-// Profili mock (demo — usati come fallback se Firestore è vuoto)
 final mockUsers = [
-  UserModel(id: 'm1', name: 'Giulia', age: 24, bio: 'Appassionata di fotografia e viaggi.', photoUrl: 'https://picsum.photos/seed/giulia24p/200/200', coverUrl: 'https://picsum.photos/seed/giulia24c/600/900', interests: ['Fotografia', 'Viaggi', 'Cucina', 'Yoga'], hasNetflix: true),
-  UserModel(id: 'm2', name: 'Marco', age: 27, bio: 'Gamer nel tempo libero, sviluppatore di giorno.', photoUrl: 'https://picsum.photos/seed/marco27p/200/200', coverUrl: 'https://picsum.photos/seed/marco27c/600/900', interests: ['Gaming', 'Tecnologia', 'Anime', 'Musica'], discordTag: 'marco#1234', hasNetflix: true),
-  UserModel(id: 'm3', name: 'Sofia', age: 22, bio: 'Studentessa di architettura. Amo l\'arte e il design.', photoUrl: 'https://picsum.photos/seed/sofia22p/200/200', coverUrl: 'https://picsum.photos/seed/sofia22c/600/900', interests: ['Arte', 'Design', 'Cinema', 'Lettura']),
-  UserModel(id: 'm4', name: 'Luca', age: 29, bio: 'Chef amatoriale e appassionato di sport.', photoUrl: 'https://picsum.photos/seed/luca29p/200/200', coverUrl: 'https://picsum.photos/seed/luca29c/600/900', interests: ['Cucina', 'Calcio', 'Running', 'Viaggi'], discordTag: 'luca_chef#5678', hasNetflix: true),
-  UserModel(id: 'm5', name: 'Elena', age: 25, bio: 'Musicista e insegnante.', photoUrl: 'https://picsum.photos/seed/elena25p/200/200', coverUrl: 'https://picsum.photos/seed/elena25c/600/900', interests: ['Musica', 'Yoga', 'Lettura']),
-  UserModel(id: 'm6', name: 'Alessio', age: 26, bio: 'Appassionato di arrampicata e outdoor.', photoUrl: 'https://picsum.photos/seed/alessi26p/200/200', coverUrl: 'https://picsum.photos/seed/alessi26c/600/900', interests: ['Arrampicata', 'Natura', 'Running', 'Fotografia'], hasNetflix: true),
-  UserModel(id: 'm7', name: 'Chiara', age: 23, bio: 'Illustratrice freelance.', photoUrl: 'https://picsum.photos/seed/chiara23p/200/200', coverUrl: 'https://picsum.photos/seed/chiara23c/600/900', interests: ['Arte', 'Podcast', 'Design', 'Anime'], discordTag: 'chiara_art#9012'),
-  UserModel(id: 'm8', name: 'Matteo', age: 28, bio: 'Appassionato di astronomia e sci-fi.', photoUrl: 'https://picsum.photos/seed/matteo28p/200/200', coverUrl: 'https://picsum.photos/seed/matteo28c/600/900', interests: ['Astronomia', 'Lettura', 'Cinema', 'Tecnologia'], hasNetflix: true),
-  UserModel(id: 'm9', name: 'Valentina', age: 21, bio: 'Ballerina classica.', photoUrl: 'https://picsum.photos/seed/vale21p/200/200', coverUrl: 'https://picsum.photos/seed/vale21c/600/900', interests: ['Danza', 'Musica', 'Viaggi', 'Moda']),
-  UserModel(id: 'm10', name: 'Riccardo', age: 30, bio: 'Avvocato di giorno, DJ di notte.', photoUrl: 'https://picsum.photos/seed/ricca30p/200/200', coverUrl: 'https://picsum.photos/seed/ricca30c/600/900', interests: ['Musica', 'Viaggi', 'Sport', 'Gaming'], discordTag: 'rico_dj#3344', hasNetflix: true),
+  UserModel(
+    id: 'm1',
+    name: 'Giulia',
+    username: 'giuplays',
+    age: 24,
+    bio: 'FPS, co-op e sessioni chill la sera.',
+    photoUrl: 'https://picsum.photos/seed/giulia24p/200/200',
+    coverUrl: 'https://picsum.photos/seed/giulia24c/600/900',
+    interests: ['FPS', 'Co-op', 'Anime'],
+    favoriteGames: ['Valorant', 'Overwatch 2', 'Phasmophobia'],
+    platforms: ['PC'],
+    lookingFor: ['Duo', 'Friendship'],
+    discordTag: 'giuplays',
+    spotifyArtist: 'The Japanese House',
+    country: 'Italia',
+    timezone: 'CET',
+  ),
+  UserModel(
+    id: 'm2',
+    name: 'Marco',
+    username: 'marcojungler',
+    age: 27,
+    bio: 'Main jungle, ranked ma senza drama.',
+    photoUrl: 'https://picsum.photos/seed/marco27p/200/200',
+    coverUrl: 'https://picsum.photos/seed/marco27c/600/900',
+    interests: ['MOBA', 'Competitive', 'Tech'],
+    favoriteGames: ['League of Legends', 'TFT'],
+    platforms: ['PC'],
+    lookingFor: ['Ranked', 'Community'],
+    discordTag: 'marcojungler',
+    riotId: 'Marco#EUW',
+    steamId: 'marco27',
+    country: 'Italia',
+    timezone: 'CET',
+  ),
+  UserModel(
+    id: 'm3',
+    name: 'Sofia',
+    username: 'sofiacozy',
+    age: 22,
+    bio: 'Indie cozy, design e late night Discord.',
+    photoUrl: 'https://picsum.photos/seed/sofia22p/200/200',
+    coverUrl: 'https://picsum.photos/seed/sofia22c/600/900',
+    interests: ['Cozy', 'Design', 'Community'],
+    favoriteGames: ['Stardew Valley', 'It Takes Two'],
+    platforms: ['PC', 'Switch'],
+    lookingFor: ['Chill', 'Friendship'],
+    discordTag: 'sofiacozy',
+    spotifyArtist: 'Clairo',
+    country: 'Italia',
+    timezone: 'CET',
+  ),
+  UserModel(
+    id: 'm4',
+    name: 'Alex',
+    username: 'alexvibes',
+    age: 25,
+    bio: 'Cerco duo, match e gente con vibe pulita.',
+    photoUrl: 'https://picsum.photos/seed/alex25p/200/200',
+    coverUrl: 'https://picsum.photos/seed/alex25c/600/900',
+    interests: ['Music', 'Gaming', 'Movies'],
+    favoriteGames: ['Fortnite', 'Minecraft', 'Party Animals'],
+    platforms: ['PC', 'PlayStation'],
+    lookingFor: ['Friendship', 'Community'],
+    discordTag: 'alexvibes',
+    country: 'Italia',
+    timezone: 'CET',
+  ),
+  UserModel(
+    id: 'm5',
+    name: 'Noemi',
+    username: 'n0eheart',
+    age: 23,
+    bio: 'Late night chat, co-op e un po’ di chaos.',
+    photoUrl: 'https://picsum.photos/seed/noemi23p/200/200',
+    coverUrl: 'https://picsum.photos/seed/noemi23c/600/900',
+    interests: ['Chat', 'Co-op', 'Music'],
+    favoriteGames: ['Overcooked', 'The Sims 4', 'Roblox'],
+    platforms: ['PC', 'Mobile'],
+    lookingFor: ['Chill', 'Duo'],
+    discordTag: 'n0eheart',
+    spotifyArtist: 'PinkPantheress',
+    country: 'Italia',
+    timezone: 'CET',
+  ),
+  UserModel(
+    id: 'm6',
+    name: 'Luca',
+    username: 'padmaster',
+    age: 26,
+    bio: 'Controller god, arcade lover, zero tilt.',
+    photoUrl: 'https://picsum.photos/seed/luca26p/200/200',
+    coverUrl: 'https://picsum.photos/seed/luca26c/600/900',
+    interests: ['Arcade', 'Fighting', 'Retro'],
+    favoriteGames: ['Rocket League', 'Tekken 8', 'EA FC'],
+    platforms: ['PlayStation', 'PC'],
+    lookingFor: ['Ranked', 'Duo'],
+    discordTag: 'padmaster',
+    riotId: 'Pad#777',
+    country: 'Italia',
+    timezone: 'CET',
+  ),
 ];
 
-// Match di esempio
-final mockMatches = [mockUsers[0], mockUsers[1], mockUsers[3]];
+final mockMatches = [mockUsers[0], mockUsers[1], mockUsers[3], mockUsers[4]];
 
-// Messaggi di esempio
 final mockMessages = {
   'm1': [
-    {'sender': 'them', 'text': 'Ciao! Ho visto che ami i viaggi 🌍', 'time': '10:30'},
-    {'sender': 'me', 'text': 'Sì! Ultima meta: Portogallo. Tu?', 'time': '10:32'},
-    {'sender': 'them', 'text': 'Anche io! Lisbona è fantastica 😍', 'time': '10:33'},
+    {'sender': 'them', 'text': 'Ti va una duo stasera?', 'time': '10:30'},
+    {'sender': 'me', 'text': 'Sì, dopo le 21 ci sono', 'time': '10:32'},
   ],
   'm2': [
-    {'sender': 'them', 'text': 'Giochi anche a RPG?', 'time': 'Ieri'},
-    {'sender': 'me', 'text': 'Certo! Principalmente su PC', 'time': 'Ieri'},
+    {'sender': 'them', 'text': 'Ranked o chill?', 'time': 'Ieri'},
+    {'sender': 'me', 'text': 'Una ranked e poi chill', 'time': 'Ieri'},
   ],
   'm4': [
-    {'sender': 'them', 'text': 'Hai provato la ricetta che ti ho mandato?', 'time': 'Lun'},
+    {'sender': 'them', 'text': 'Stessa vibe, stesso caos', 'time': '18:20'},
+  ],
+  'm5': [
+    {'sender': 'them', 'text': 'Facciamo un game e poi chat?', 'time': '17:02'},
   ],
 };

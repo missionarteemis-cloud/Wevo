@@ -33,6 +33,9 @@ class WevoApp extends StatelessWidget {
           return const LoginScreen();
         },
       ),
+      routes: {
+        '/login': (_) => const LoginScreen(),
+      },
     );
   }
 }
