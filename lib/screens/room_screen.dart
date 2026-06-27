@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import '../game/furniture_catalog.dart';
 import '../game/room_game.dart';
 import '../models/room_model.dart';
+import '../services/inventory_service.dart';
 import '../services/room_service.dart';
 import '../theme.dart';
+import 'inventory_window.dart';
 import 'store_window.dart';
 
 /// Schermata stanza — game layer (vedi docs/game-layer.md).
@@ -22,12 +24,49 @@ class _RoomScreenState extends State<RoomScreen> {
   String? _error;
   bool _storeOpen = false;
   Offset _storePos = const Offset(20, 96);
+  bool _inventoryOpen = false;
+  Offset _invPos = const Offset(40, 110);
 
   @override
   void initState() {
     super.initState();
     _game.onPersist = _persist;
+    _game.onPlace = _place;
     _load();
+  }
+
+  Future<void> _reloadRoom() async {
+    try {
+      final room = await RoomService.loadOrCreateMyRoom();
+      _game.applyRoom(room);
+    } catch (_) {
+      // best-effort
+    }
+  }
+
+  Future<void> _place(RoomFurnitureItem item) async {
+    final r = await InventoryService.placeItem(item.instanceId, item.x, item.y, item.rot);
+    if (!mounted) return;
+    if (r.ok) {
+      await _reloadRoom();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Piazzamento non riuscito')),
+      );
+    }
+  }
+
+  Future<void> _take(RoomFurnitureItem item) async {
+    final r = await InventoryService.takeItem(item.instanceId);
+    if (!mounted) return;
+    if (r.ok) {
+      _game.selected.value = null;
+      await _reloadRoom();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Operazione non riuscita')),
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -70,6 +109,7 @@ class _RoomScreenState extends State<RoomScreen> {
             child: _Header(
               roomName: _roomName,
               onStore: () => setState(() => _storeOpen = !_storeOpen),
+              onInventory: () => setState(() => _inventoryOpen = !_inventoryOpen),
             ),
           ),
 
@@ -81,6 +121,27 @@ class _RoomScreenState extends State<RoomScreen> {
               child: StoreWindow(
                 onDrag: (delta) => setState(() => _storePos += delta),
                 onClose: () => setState(() => _storeOpen = false),
+              ),
+            ),
+
+          // Finestra inventario draggabile
+          if (_inventoryOpen)
+            Positioned(
+              left: _invPos.dx,
+              top: _invPos.dy,
+              child: InventoryWindow(
+                onDrag: (delta) => setState(() => _invPos += delta),
+                onClose: () => setState(() => _inventoryOpen = false),
+                onPlaceItem: (inv) {
+                  setState(() => _inventoryOpen = false);
+                  _game.startPlace(RoomFurnitureItem(
+                    instanceId: inv.instanceId,
+                    itemId: inv.itemId,
+                    x: 3,
+                    y: 3,
+                    rot: 0,
+                  ));
+                },
               ),
             ),
 
@@ -104,6 +165,7 @@ class _RoomScreenState extends State<RoomScreen> {
                   item: item,
                   onMove: _game.startMove,
                   onRotate: _game.rotateSelected,
+                  onTake: () => _take(item),
                   onClose: () => _game.selected.value = null,
                 );
               },
@@ -132,11 +194,13 @@ class _FurniInfo extends StatelessWidget {
   final RoomFurnitureItem item;
   final VoidCallback onMove;
   final VoidCallback onRotate;
+  final VoidCallback onTake;
   final VoidCallback onClose;
   const _FurniInfo({
     required this.item,
     required this.onMove,
     required this.onRotate,
+    required this.onTake,
     required this.onClose,
   });
 
@@ -179,8 +243,7 @@ class _FurniInfo extends StatelessWidget {
               const SizedBox(width: 6),
               _MiniAction(icon: Icons.rotate_right, label: 'Ruota', onTap: onRotate),
               const SizedBox(width: 6),
-              // Prendi → inventario: serve il backend inventario (prossimo step)
-              const _MiniAction(icon: Icons.inventory_2_outlined, label: 'Prendi'),
+              _MiniAction(icon: Icons.inventory_2_outlined, label: 'Prendi', onTap: onTake),
             ],
           ),
         ],
@@ -299,7 +362,8 @@ class _MiniAction extends StatelessWidget {
 class _Header extends StatelessWidget {
   final String roomName;
   final VoidCallback onStore;
-  const _Header({required this.roomName, required this.onStore});
+  final VoidCallback onInventory;
+  const _Header({required this.roomName, required this.onStore, required this.onInventory});
 
   @override
   Widget build(BuildContext context) {
@@ -347,7 +411,7 @@ class _Header extends StatelessWidget {
             ),
             _CircleBtn(icon: Icons.storefront, onTap: onStore),
             const SizedBox(width: 8),
-            _CircleBtn(icon: Icons.inventory_2_outlined, onTap: () {}),
+            _CircleBtn(icon: Icons.inventory_2_outlined, onTap: onInventory),
             const SizedBox(width: 8),
             _CircleBtn(
               icon: Icons.close,

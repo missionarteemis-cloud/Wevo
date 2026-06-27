@@ -67,6 +67,28 @@ const Map<String, FurnitureDef> furnitureCatalog = {
     color: WevoColors.sage,
     interaction: 'lie',
   ),
+  'arcade_duo_2x2': FurnitureDef(
+    name: 'Arcade Duo',
+    description: 'Cabinato arcade per due.',
+    w: 2,
+    h: 2,
+    height: 48,
+    color: WevoColors.cyan,
+  ),
+  'neon_rug_3x2': FurnitureDef(
+    name: 'Tappeto Neon',
+    description: 'Un tappeto luminoso 3×2.',
+    w: 3,
+    h: 2,
+    height: 4,
+    color: WevoColors.periwinkle,
+  ),
+  'fridge_pixel_1x1': FurnitureDef(
+    name: 'Frigo Pixel',
+    description: 'Tiene fresche le vibe.',
+    height: 44,
+    color: WevoColors.sage,
+  ),
 };
 
 FurnitureDef furnitureDef(String itemId) => furnitureCatalog[itemId] ?? _fallback;

@@ -24,6 +24,9 @@ class RoomGame extends FlameGame {
   /// Callback per persistere l'arredo (RoomScreen → RoomService.saveFurniture).
   void Function(List<RoomFurnitureItem>)? onPersist;
 
+  /// Callback al confermare un piazzamento dall'inventario (→ Cloud Function placeItem).
+  void Function(RoomFurnitureItem)? onPlace;
+
   List<RoomFurnitureItem> _pending = const [];
   IsoRoom? _iso;
 
@@ -36,6 +39,7 @@ class RoomGame extends FlameGame {
       selected: selected,
       moving: moving,
       onPersist: (f) => onPersist?.call(f),
+      onPlace: (item) => onPlace?.call(item),
     );
     await add(_iso!);
     _iso!.setFurniture(_pending);
@@ -49,6 +53,9 @@ class RoomGame extends FlameGame {
   void startMove() => _iso?.startMove();
   void rotateSelected() => _iso?.rotate();
   void cancelMove() => _iso?.cancelMove();
+
+  /// Avvia il piazzamento di un item posseduto (dall'inventario).
+  void startPlace(RoomFurnitureItem item) => _iso?.startPlace(item);
 }
 
 /// Geometria del box isometrico di un mobile.
@@ -69,11 +76,13 @@ class IsoRoom extends PositionComponent
     required this.selected,
     required this.moving,
     required this.onPersist,
+    required this.onPlace,
   });
 
   final ValueNotifier<RoomFurnitureItem?> selected;
   final ValueNotifier<bool> moving;
   final void Function(List<RoomFurnitureItem>) onPersist;
+  final void Function(RoomFurnitureItem) onPlace;
 
   // ── Geometria griglia ──
   static const int cols = 7;
@@ -96,8 +105,9 @@ class IsoRoom extends PositionComponent
   List<RoomFurnitureItem> _furniture = const [];
   final Set<int> _occupied = <int>{};
 
-  // Anteprima spostamento (null = non in modalità sposta)
+  // Anteprima spostamento/piazzamento (null = nessun fantasma attivo)
   RoomFurnitureItem? _ghost;
+  bool _ghostIsNew = false; // true = piazzamento da inventario (non ancora in stanza)
 
   // ── Paint ──
   final Paint _tileA = Paint()..color = WevoColors.surface;
@@ -309,12 +319,34 @@ class IsoRoom extends PositionComponent
     final s = selected.value;
     if (s == null) return;
     _ghost = s;
+    _ghostIsNew = false;
     moving.value = true;
   }
 
   void cancelMove() {
     _ghost = null;
+    _ghostIsNew = false;
     moving.value = false;
+  }
+
+  /// Piazzamento di un item posseduto (dall'inventario): fantasma su cella libera.
+  void startPlace(RoomFurnitureItem item) {
+    _ghost = _firstFreePlacement(item);
+    _ghostIsNew = true;
+    selected.value = null;
+    moving.value = true;
+  }
+
+  RoomFurnitureItem _firstFreePlacement(RoomFurnitureItem item) {
+    final center = _clampToBounds(item.copyWith(x: cols ~/ 2, y: rows ~/ 2));
+    if (_isPlacementValid(center, '')) return center;
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        final cand = _clampToBounds(item.copyWith(x: c, y: r));
+        if (_isPlacementValid(cand, '')) return cand;
+      }
+    }
+    return _clampToBounds(item.copyWith(x: 0, y: 0));
   }
 
   void rotate() {
@@ -378,11 +410,19 @@ class IsoRoom extends PositionComponent
       final ny = row.clamp(0, rows - h);
       if (nx == _ghost!.x && ny == _ghost!.y) {
         if (_isPlacementValid(_ghost!, _ghost!.instanceId)) {
-          _replace(_ghost!);
-          selected.value = _ghost;
+          if (_ghostIsNew) {
+            // Piazzamento da inventario → Cloud Function placeItem (RoomScreen).
+            onPlace(_ghost!);
+            selected.value = null;
+          } else {
+            // Riposizionamento di un mobile già in stanza → salva diretto.
+            _replace(_ghost!);
+            selected.value = _ghost;
+            onPersist(_furniture);
+          }
           _ghost = null;
+          _ghostIsNew = false;
           moving.value = false;
-          onPersist(_furniture);
         }
       } else {
         _ghost = _ghost!.copyWith(x: nx, y: ny);
