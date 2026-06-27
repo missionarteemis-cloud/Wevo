@@ -81,3 +81,44 @@ Regola: **separa per quanto spesso cambia e quanto deve vivere.**
 5. Movimento a snap.
 6. Chat stanza effimera.
 Se questo slice gira, il concetto è provato e si itera (emote, editor mobili, ping proprietario).
+
+---
+
+## 14. Economia, store, inventario (requisiti Diego, 2026-06-27)
+- **Valuta virtuale** ("coins"): guadagnabile in vari modi (TBD), spendibile nello **store interno**.
+- **Store**: vende oggetti virtuali (mobili) per coins.
+- **Inventario personale**: oggetti posseduti ma non piazzati. Icona inventario nella stanza.
+- **Stanza di default già arredata** con qualche oggetto base.
+- **Click su oggetto** → riquadro descrizione in **basso a destra** (stile Habbo "furni info"). Sotto il riquadro: **Sposta · Ruota · Prendi** ("Prendi" rimette in inventario).
+- **Mobili multi-cella**: 1×1, 2×2, 3×1, ecc. + **rotazione**.
+- **Mobili interattivi** (sedie, divani, letti, distributori): **doppio tap** → l'avatar interagisce (siediti/sdraiati). Lo stato (es. "seduto su X") è condiviso via RTDB così i visitatori lo vedono.
+- **Niente clipping**: l'avatar **non attraversa** gli oggetti (collisione sulle celle occupate).
+
+### ⚠️ Anti-cheat: la valuta è server-authoritative
+Il saldo `coins` e l'inventario **NON** sono scrivibili dal client (le regole lo vietano). Gli acquisti passano da una **Cloud Function** `buyItem(itemId)` che verifica `price ≤ coins`, scala i coins e aggiunge l'oggetto. Altrimenti un utente falsifica il saldo. (La Function arriva quando facciamo lo store vero; lo schema va però progettato così **da subito**.)
+
+## 15. Modello dati esteso (il "contratto" frontend↔backend)
+Generico ed estensibile, così le iterazioni grafiche/comportamentali NON richiedono modifiche backend.
+
+**Firestore**
+- `catalog/{itemId}` (definizione store, evolve senza update app):
+  `{ name, description, price, footprint:{w,h}, rotatable:bool, interaction:"none"|"sit"|"lie", assetRef, category, props:{} }`
+  - `assetRef` = chiave nello **sprite manifest lato client** (itemId → sprite per rotazione). `props` = blob libero per estensioni future (niente migrazioni).
+- `users/{uid}` aggiunge `coins:int` → **read-only per il client** (mutato solo server-side).
+- `users/{uid}/inventory/{instanceId}` = `{ itemId, acquiredAt }` (posseduto, non piazzato).
+- `rooms/{ownerUid}` = `{ ownerUid, name, theme:{floor,wallpaper}, furniture:[ {instanceId, itemId, x, y, rot} ], updatedAt }`.
+  - Piazzare = sposta l'istanza da `inventory` a `rooms.furniture`. "Prendi" = inverso.
+
+**Realtime DB** (invariato + stato interazione)
+- `roomPresence/{ownerUid}/{visitorUid}` aggiunge `sittingOn: instanceId|null`.
+
+### Responsabilità (chi tocca cosa)
+- **Frontend (Claude):** rendering mobili (multi-cella + rotazione + profondità), UI store/inventario, riquadro descrizione, controlli Sposta/Ruota/Prendi, **collisione** (celle occupate da `footprint`+`rot`), interazioni doppio-tap (sit/lie), sprite manifest/catalogo client.
+- **Backend (Craw):** schema Firestore, **regole** (coins/inventory client-read-only), `RoomService` (load/save room), più avanti la **Cloud Function `buyItem`** e il sistema di guadagno coins.
+- **Contratto:** i campi qui sopra. Tenerli generici (`itemId`, `props`) = libertà totale lato visivo/comportamentale senza riaprire il backend.
+
+## 16. Pipeline asset (pixel-art isometrico)
+Principio chiave: la coerenza viene dalla **spec**, non dalla fonte. Definire una spec stretta e un **manifest**, poi qualsiasi fonte (pack/artista/AI) deve conformarsi.
+- **Spec arte:** tile base 64×32, angolo iso 2:1, direzione luce fissa, palette neon Wevo. Ogni oggetto = sprite per ciascuna rotazione, ancorato alla cella.
+- **Manifest** (`assets/furniture/manifest.json`): `assetRef → { file, anchor, frames per rotazione, footprint }`. Aggiungere un mobile = droppare lo sprite + una riga di manifest (zero codice).
+- **Fonti (in ordine pratico):** (1) prototipo → pack CC0 **Kenney.nl** / itch.io per non bloccare le meccaniche; (2) identità → **artista su commissione** (itch.io/Fiverr) per un set coeso, OPPURE **AI pixel-art specializzata** (Retro Diffusion, PixelLab.ai) o **ComfyUI** locale con LoRA pixel/iso; (3) cleanup/palette in **Aseprite**. Le meccaniche si costruiscono su placeholder; l'arte vera si infila dopo via manifest.

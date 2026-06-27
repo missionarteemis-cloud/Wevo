@@ -15,9 +15,30 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if signedIn();
-      allow create: if isSelf(userId);
-      allow update: if isSelf(userId);
+      allow create: if isSelf(userId)
+        && !('coins' in request.resource.data)
+        && !('inventory' in request.resource.data);
+      allow update: if isSelf(userId)
+        && request.resource.data.coins == resource.data.coins;
       allow delete: if false;
+
+      match /inventory/{instanceId} {
+        allow read: if isSelf(userId);
+        allow write: if false;
+      }
+    }
+
+    match /rooms/{ownerUid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.auth.uid == ownerUid
+        && request.resource.data.ownerUid == ownerUid;
+      allow delete: if false;
+    }
+
+    match /catalog/{itemId} {
+      allow read: if signedIn();
+      allow write: if false;
     }
 
     match /swipes/{swipeId} {
