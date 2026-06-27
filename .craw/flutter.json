@@ -1,0 +1,5 @@
+{
+  "setup": "flutter_dev",
+  "device_default": "chrome",
+  "note": "Test in web/Chrome di default. Navigazione via integration_test (canvas: niente clic DOM). Screenshot/critica visiva ok via Playwright."
+}

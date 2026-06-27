@@ -90,8 +90,6 @@ class _TwinkleStarsPainter extends CustomPainter {
         pinkAmount,
       )!;
 
-      final starColor = color.withOpacity(opacity);
-
       // Outer glow (netto quando pulse > 0.3)
       if (pulse > 0.25) {
         final glowStrength = (pulse - 0.25) * 0.3;

@@ -62,7 +62,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const MainShell()),
+      MaterialPageRoute(builder: (_) => MainShell(shellKey: mainShellKey)),
       (_) => false,
     );
   }
