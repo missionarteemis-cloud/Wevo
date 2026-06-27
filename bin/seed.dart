@@ -7,7 +7,6 @@
 //  - Creates Firestore documents, matches, and chat messages
 //  - Password for all: demo123
 
-import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
