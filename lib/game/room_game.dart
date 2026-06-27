@@ -11,13 +11,18 @@ import 'furniture_catalog.dart';
 
 /// Game layer — stanza isometrica (vedi docs/game-layer.md).
 ///
-/// Arredo reale (Firestore via RoomService), rendering multi-cella con
-/// ordinamento per profondità, selezione oggetto a livello di **silhouette**
-/// (qualunque pixel dell'oggetto), e movimento avatar con **pathfinding**
-/// (aggira gli ostacoli, niente clipping).
+/// Arredo reale (Firestore via RoomService), rendering multi-cella con depth
+/// sorting, selezione per silhouette, pathfinding (aggira gli ostacoli) e
+/// modalità **Sposta/Ruota** con anteprima "fantasma" + conferma.
 class RoomGame extends FlameGame {
-  /// Item selezionato (alimenta il riquadro descrizione in RoomScreen).
+  /// Item selezionato (riquadro descrizione in RoomScreen).
   final ValueNotifier<RoomFurnitureItem?> selected = ValueNotifier(null);
+
+  /// True mentre si sta spostando un mobile (modalità fantasma).
+  final ValueNotifier<bool> moving = ValueNotifier(false);
+
+  /// Callback per persistere l'arredo (RoomScreen → RoomService.saveFurniture).
+  void Function(List<RoomFurnitureItem>)? onPersist;
 
   List<RoomFurnitureItem> _pending = const [];
   IsoRoom? _iso;
@@ -27,19 +32,26 @@ class RoomGame extends FlameGame {
 
   @override
   Future<void> onLoad() async {
-    _iso = IsoRoom(selected: selected);
+    _iso = IsoRoom(
+      selected: selected,
+      moving: moving,
+      onPersist: (f) => onPersist?.call(f),
+    );
     await add(_iso!);
     _iso!.setFurniture(_pending);
   }
 
-  /// Aggancia la stanza reale (caricata da RoomService).
   void applyRoom(RoomModel room) {
     _pending = room.furniture;
     _iso?.setFurniture(room.furniture);
   }
+
+  void startMove() => _iso?.startMove();
+  void rotateSelected() => _iso?.rotate();
+  void cancelMove() => _iso?.cancelMove();
 }
 
-/// Geometria del box isometrico di un mobile (corner base + corner rialzati).
+/// Geometria del box isometrico di un mobile.
 typedef _BoxPoints = ({
   Offset topC,
   Offset rightC,
@@ -53,9 +65,15 @@ typedef _BoxPoints = ({
 
 class IsoRoom extends PositionComponent
     with TapCallbacks, HasGameReference<RoomGame> {
-  IsoRoom({required this.selected});
+  IsoRoom({
+    required this.selected,
+    required this.moving,
+    required this.onPersist,
+  });
 
   final ValueNotifier<RoomFurnitureItem?> selected;
+  final ValueNotifier<bool> moving;
+  final void Function(List<RoomFurnitureItem>) onPersist;
 
   // ── Geometria griglia ──
   static const int cols = 7;
@@ -66,7 +84,7 @@ class IsoRoom extends PositionComponent
 
   final Vector2 _origin = Vector2.zero();
 
-  // Avatar: casella logica + posizione pixel + percorso da seguire
+  // Avatar
   int _avatarCol = cols ~/ 2;
   int _avatarRow = rows ~/ 2;
   final Vector2 _avatarPos = Vector2.zero();
@@ -74,11 +92,14 @@ class IsoRoom extends PositionComponent
   int _destCol = cols ~/ 2;
   int _destRow = rows ~/ 2;
 
-  // Arredo + celle occupate
+  // Arredo + collisione
   List<RoomFurnitureItem> _furniture = const [];
   final Set<int> _occupied = <int>{};
 
-  // ── Paint riusabili ──
+  // Anteprima spostamento (null = non in modalità sposta)
+  RoomFurnitureItem? _ghost;
+
+  // ── Paint ──
   final Paint _tileA = Paint()..color = WevoColors.surface;
   final Paint _tileB = Paint()..color = WevoColors.surfaceHi;
   final Paint _edge = Paint()
@@ -122,7 +143,8 @@ class IsoRoom extends PositionComponent
   @override
   bool containsLocalPoint(Vector2 point) => true;
 
-  void _syncAvatarPixel() => _avatarPos.setFrom(_tileCenter(_avatarCol, _avatarRow));
+  void _syncAvatarPixel() =>
+      _avatarPos.setFrom(_tileCenter(_avatarCol, _avatarRow));
 
   // ── Arredo / collisione ──
   void setFurniture(List<RoomFurnitureItem> items) {
@@ -192,7 +214,7 @@ class IsoRoom extends PositionComponent
     return (c.round().clamp(0, cols - 1), r.round().clamp(0, rows - 1));
   }
 
-  // ── Box geometry / hit-test silhouette ──
+  // ── Box geometry / hit-test ──
   _BoxPoints _boxPoints(RoomFurnitureItem item) {
     final def = furnitureDef(item.itemId);
     final (w, h) = footprintWH(def, item.rot);
@@ -235,7 +257,6 @@ class IsoRoom extends PositionComponent
     return inside;
   }
 
-  /// Item la cui silhouette contiene il punto, front-most prima.
   RoomFurnitureItem? _furnitureAtPixel(Vector2 p) {
     final pt = Offset(p.x, p.y);
     final sorted = [..._furniture]
@@ -246,7 +267,7 @@ class IsoRoom extends PositionComponent
     return null;
   }
 
-  // ── Pathfinding (BFS, 4-direzioni, aggira gli occupati) ──
+  // ── Pathfinding (BFS) ──
   List<(int, int)> _findPath(int sc, int sr, int gc, int gr) {
     if (sc == gc && sr == gr) return const [];
     final prev = <int, int>{};
@@ -283,10 +304,93 @@ class IsoRoom extends PositionComponent
     return path.reversed.toList();
   }
 
-  // ── Input: silhouette oggetto = seleziona; pavimento = pathfind ──
+  // ── Spostamento / rotazione ──
+  void startMove() {
+    final s = selected.value;
+    if (s == null) return;
+    _ghost = s;
+    moving.value = true;
+  }
+
+  void cancelMove() {
+    _ghost = null;
+    moving.value = false;
+  }
+
+  void rotate() {
+    if (_ghost != null) {
+      _ghost = _clampToBounds(_ghost!.copyWith(rot: (_ghost!.rot + 90) % 360));
+      return;
+    }
+    final s = selected.value;
+    if (s == null) return;
+    final rotated = _clampToBounds(s.copyWith(rot: (s.rot + 90) % 360));
+    if (_isPlacementValid(rotated, s.instanceId)) {
+      _replace(rotated);
+      selected.value = rotated;
+      onPersist(_furniture);
+    }
+  }
+
+  RoomFurnitureItem _clampToBounds(RoomFurnitureItem item) {
+    final (w, h) = footprintWH(furnitureDef(item.itemId), item.rot);
+    return item.copyWith(
+      x: item.x.clamp(0, cols - w),
+      y: item.y.clamp(0, rows - h),
+    );
+  }
+
+  bool _isPlacementValid(RoomFurnitureItem item, String excludeId) {
+    for (final (c, r) in _footprintTiles(item)) {
+      if (!_inBounds(c, r)) return false;
+    }
+    final others = <int>{};
+    for (final f in _furniture) {
+      if (f.instanceId == excludeId) continue;
+      for (final (c, r) in _footprintTiles(f)) {
+        others.add(_key(c, r));
+      }
+    }
+    for (final (c, r) in _footprintTiles(item)) {
+      if (others.contains(_key(c, r))) return false;
+    }
+    return true;
+  }
+
+  void _replace(RoomFurnitureItem item) {
+    _furniture = [
+      for (final f in _furniture)
+        if (f.instanceId == item.instanceId) item else f,
+    ];
+    _recomputeOccupied();
+  }
+
+  // ── Input ──
   @override
   void onTapDown(TapDownEvent event) {
     final local = event.localPosition;
+
+    // Modalità sposta: il tocco riposiziona/conferma il fantasma.
+    if (_ghost != null) {
+      final (col, row) = _pixelToTile(local);
+      final (w, h) = footprintWH(furnitureDef(_ghost!.itemId), _ghost!.rot);
+      final nx = col.clamp(0, cols - w);
+      final ny = row.clamp(0, rows - h);
+      if (nx == _ghost!.x && ny == _ghost!.y) {
+        if (_isPlacementValid(_ghost!, _ghost!.instanceId)) {
+          _replace(_ghost!);
+          selected.value = _ghost;
+          _ghost = null;
+          moving.value = false;
+          onPersist(_furniture);
+        }
+      } else {
+        _ghost = _ghost!.copyWith(x: nx, y: ny);
+      }
+      return;
+    }
+
+    // Normale: silhouette = seleziona; pavimento = pathfind.
     final hit = _furnitureAtPixel(local);
     if (hit != null) {
       selected.value = hit;
@@ -300,7 +404,7 @@ class IsoRoom extends PositionComponent
     _path = _findPath(_avatarCol, _avatarRow, col, row);
   }
 
-  // ── Movimento lungo il percorso ──
+  // ── Movimento ──
   @override
   void update(double dt) {
     super.update(dt);
@@ -327,6 +431,7 @@ class IsoRoom extends PositionComponent
     _renderFloor(canvas);
     _renderHighlight(canvas);
     _renderObjects(canvas);
+    if (_ghost != null) _drawGhost(canvas);
   }
 
   Path _diamond(Vector2 c) => Path()
@@ -347,7 +452,7 @@ class IsoRoom extends PositionComponent
   }
 
   void _renderHighlight(Canvas canvas) {
-    if (_path.isEmpty) return; // mostra il bersaglio solo mentre si muove
+    if (_path.isEmpty) return;
     canvas.drawPath(_diamond(_tileCenter(_destCol, _destRow)), _highlight);
   }
 
@@ -370,11 +475,7 @@ class IsoRoom extends PositionComponent
   Color _darken(Color c, double amt) =>
       Color.lerp(c, const Color(0xFF000000), amt)!;
 
-  void _drawFurniture(Canvas canvas, RoomFurnitureItem item) {
-    final def = furnitureDef(item.itemId);
-    final g = _boxPoints(item);
-
-    // Faccia sinistra
+  void _drawBox(Canvas canvas, _BoxPoints g, Paint left, Paint right, Paint top) {
     canvas.drawPath(
       Path()
         ..moveTo(g.leftC.dx, g.leftC.dy)
@@ -382,9 +483,8 @@ class IsoRoom extends PositionComponent
         ..lineTo(g.b2.dx, g.b2.dy)
         ..lineTo(g.l2.dx, g.l2.dy)
         ..close(),
-      Paint()..color = _darken(def.color, 0.45),
+      left,
     );
-    // Faccia destra
     canvas.drawPath(
       Path()
         ..moveTo(g.bottomC.dx, g.bottomC.dy)
@@ -392,21 +492,60 @@ class IsoRoom extends PositionComponent
         ..lineTo(g.r2.dx, g.r2.dy)
         ..lineTo(g.b2.dx, g.b2.dy)
         ..close(),
-      Paint()..color = _darken(def.color, 0.25),
+      right,
     );
-    // Faccia superiore
-    final top = Path()
-      ..moveTo(g.t2.dx, g.t2.dy)
-      ..lineTo(g.r2.dx, g.r2.dy)
-      ..lineTo(g.b2.dx, g.b2.dy)
-      ..lineTo(g.l2.dx, g.l2.dy)
-      ..close();
-    canvas.drawPath(top, Paint()..color = def.color);
-    canvas.drawPath(top, _furnEdge);
+    canvas.drawPath(
+      Path()
+        ..moveTo(g.t2.dx, g.t2.dy)
+        ..lineTo(g.r2.dx, g.r2.dy)
+        ..lineTo(g.b2.dx, g.b2.dy)
+        ..lineTo(g.l2.dx, g.l2.dy)
+        ..close(),
+      top,
+    );
+  }
 
-    if (selected.value?.instanceId == item.instanceId) {
-      canvas.drawPath(top, _selEdge);
+  Path _topFace(_BoxPoints g) => Path()
+    ..moveTo(g.t2.dx, g.t2.dy)
+    ..lineTo(g.r2.dx, g.r2.dy)
+    ..lineTo(g.b2.dx, g.b2.dy)
+    ..lineTo(g.l2.dx, g.l2.dy)
+    ..close();
+
+  void _drawFurniture(Canvas canvas, RoomFurnitureItem item) {
+    final def = furnitureDef(item.itemId);
+    final g = _boxPoints(item);
+    _drawBox(
+      canvas,
+      g,
+      Paint()..color = _darken(def.color, 0.45),
+      Paint()..color = _darken(def.color, 0.25),
+      Paint()..color = def.color,
+    );
+    canvas.drawPath(_topFace(g), _furnEdge);
+    if (selected.value?.instanceId == item.instanceId && _ghost == null) {
+      canvas.drawPath(_topFace(g), _selEdge);
     }
+  }
+
+  void _drawGhost(Canvas canvas) {
+    final item = _ghost!;
+    final valid = _isPlacementValid(item, item.instanceId);
+    final tint = valid ? WevoColors.teal : WevoColors.coral;
+    // celle del footprint evidenziate
+    for (final (c, r) in _footprintTiles(item)) {
+      canvas.drawPath(_diamond(_tileCenter(c, r)), Paint()..color = tint.withOpacity(0.18));
+    }
+    final g = _boxPoints(item);
+    final face = Paint()..color = tint.withOpacity(0.32);
+    _drawBox(canvas, g, face, face, face);
+    canvas.drawPath(
+      _topFace(g),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = tint,
+    );
   }
 
   void _renderAvatar(Canvas canvas) {
