@@ -38,4 +38,8 @@ node_modules/
 
 # OS
 Thumbs.db
-
+# Service account secrets
+*serviceAccount*.json
+service-account*.json
+*.serviceaccount.json
+secrets/

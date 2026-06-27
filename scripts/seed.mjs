@@ -1,38 +1,22 @@
-import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-} from 'firebase/auth';
-import {
-  getFirestore,
-  doc,
-  setDoc,
-  getDoc,
-  updateDoc,
-  arrayUnion,
-  collection,
-  addDoc,
-  Timestamp,
-} from 'firebase/firestore';
+import { initializeApp, applicationDefault } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 
-const firebaseConfig = {
-  apiKey: 'AIzaSyBtc_p9_zKfPW_wICyp5qWFlqYSLCR0yYY',
-  authDomain: 'wevo-22275.firebaseapp.com',
-  projectId: 'wevo-22275',
-  storageBucket: 'wevo-22275.firebasestorage.app',
-  messagingSenderId: '800541292018',
-  appId: '1:800541292018:web:b384c72504d28e033d676b',
-  measurementId: 'G-TG0ZCQB0Q4',
-};
+if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  console.error('❌ Missing GOOGLE_APPLICATION_CREDENTIALS');
+  process.exit(1);
+}
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+initializeApp({ credential: applicationDefault() });
+
+const auth = getAuth();
+const db = getFirestore();
 
 const demoAccount = {
+  uid: 'demo',
   email: 'demo@wevo.app',
   password: 'wevo1234',
+  displayName: 'Diego',
   name: 'Diego',
   username: 'wevo_demo',
   age: 25,
@@ -49,91 +33,140 @@ const demoAccount = {
 
 const demoUsers = [
   {
-    email: 'giulia@wevo.app', password: 'wevo1234', username: 'giuplays', name: 'Giulia', age: 24,
+    uid: 'm1',
+    email: 'giulia@wevo.app', password: 'wevo1234', username: 'giuplays', name: 'Giulia', displayName: 'Giulia', age: 24,
     bio: 'FPS, co-op e sessioni chill la sera.', photoUrl: 'https://picsum.photos/seed/giulia24p/200/200',
     coverUrl: 'https://picsum.photos/seed/giulia24c/600/900', interests: ['FPS', 'Co-op', 'Anime'],
     favoriteGames: ['Valorant', 'Overwatch 2', 'Phasmophobia'], platforms: ['PC'], lookingFor: ['Duo', 'Friendship'],
     discordTag: 'giuplays', spotifyArtist: 'The Japanese House', country: 'Italia', timezone: 'CET',
     messages: [
-      { text: 'Ti va una duo stasera?', minutesAgo: 60, sender: 'other' },
-      { text: 'Sì, dopo le 21 ci sono', minutesAgo: 58, sender: 'demo' },
-      { text: 'Perfetto, ti aspetto!', minutesAgo: 55, sender: 'other' },
+      { id: 'm1-msg-1', text: 'Ti va una duo stasera?', minutesAgo: 60, sender: 'other' },
+      { id: 'm1-msg-2', text: 'Sì, dopo le 21 ci sono', minutesAgo: 58, sender: 'demo' },
+      { id: 'm1-msg-3', text: 'Perfetto, ti aspetto!', minutesAgo: 55, sender: 'other' },
     ],
   },
   {
-    email: 'marco@wevo.app', password: 'wevo1234', username: 'marcojungler', name: 'Marco', age: 27,
+    uid: 'm2',
+    email: 'marco@wevo.app', password: 'wevo1234', username: 'marcojungler', name: 'Marco', displayName: 'Marco', age: 27,
     bio: 'Main jungle, ranked ma senza drama.', photoUrl: 'https://picsum.photos/seed/marco27p/200/200',
     coverUrl: 'https://picsum.photos/seed/marco27c/600/900', interests: ['MOBA', 'Competitive', 'Tech'],
     favoriteGames: ['League of Legends', 'TFT'], platforms: ['PC'], lookingFor: ['Ranked', 'Community'],
     discordTag: 'marcojungler', riotId: 'Marco#EUW', steamId: 'marco27', country: 'Italia', timezone: 'CET',
     messages: [
-      { text: 'Ranked o chill?', minutesAgo: 180, sender: 'other' },
-      { text: 'Una ranked e poi chill', minutesAgo: 178, sender: 'demo' },
-      { text: "Let's go allora", minutesAgo: 175, sender: 'other' },
+      { id: 'm2-msg-1', text: 'Ranked o chill?', minutesAgo: 180, sender: 'other' },
+      { id: 'm2-msg-2', text: 'Una ranked e poi chill', minutesAgo: 178, sender: 'demo' },
+      { id: 'm2-msg-3', text: "Let's go allora", minutesAgo: 175, sender: 'other' },
     ],
   },
   {
-    email: 'sofia@wevo.app', password: 'wevo1234', username: 'sofiacozy', name: 'Sofia', age: 22,
+    uid: 'm3',
+    email: 'sofia@wevo.app', password: 'wevo1234', username: 'sofiacozy', name: 'Sofia', displayName: 'Sofia', age: 22,
     bio: 'Indie cozy, design e late night Discord.', photoUrl: 'https://picsum.photos/seed/sofia22p/200/200',
     coverUrl: 'https://picsum.photos/seed/sofia22c/600/900', interests: ['Cozy', 'Design', 'Community'],
     favoriteGames: ['Stardew Valley', 'It Takes Two'], platforms: ['PC', 'Switch'], lookingFor: ['Chill', 'Friendship'],
     discordTag: 'sofiacozy', spotifyArtist: 'Clairo', country: 'Italia', timezone: 'CET',
     messages: [
-      { text: 'Hey! Hai mai giocato a Stardew?', minutesAgo: 300, sender: 'other' },
-      { text: 'Mai provato, mi incuriosisce!', minutesAgo: 298, sender: 'demo' },
-      { text: 'Te lo mostro volentieri, è super rilassante', minutesAgo: 295, sender: 'other' },
+      { id: 'm3-msg-1', text: 'Hey! Hai mai giocato a Stardew?', minutesAgo: 300, sender: 'other' },
+      { id: 'm3-msg-2', text: 'Mai provato, mi incuriosisce!', minutesAgo: 298, sender: 'demo' },
+      { id: 'm3-msg-3', text: 'Te lo mostro volentieri, è super rilassante', minutesAgo: 295, sender: 'other' },
     ],
   },
   {
-    email: 'alex@wevo.app', password: 'wevo1234', username: 'alexvibes', name: 'Alex', age: 25,
+    uid: 'm4',
+    email: 'alex@wevo.app', password: 'wevo1234', username: 'alexvibes', name: 'Alex', displayName: 'Alex', age: 25,
     bio: 'Cerco duo, match e gente con vibe pulita.', photoUrl: 'https://picsum.photos/seed/alex25p/200/200',
     coverUrl: 'https://picsum.photos/seed/alex25c/600/900', interests: ['Music', 'Gaming', 'Movies'],
     favoriteGames: ['Fortnite', 'Minecraft', 'Party Animals'], platforms: ['PC', 'PlayStation'], lookingFor: ['Friendship', 'Community'],
     discordTag: 'alexvibes', country: 'Italia', timezone: 'CET',
     messages: [
-      { text: 'Stessa vibe, stesso caos 🔥', minutesAgo: 400, sender: 'other' },
+      { id: 'm4-msg-1', text: 'Stessa vibe, stesso caos 🔥', minutesAgo: 400, sender: 'other' },
     ],
   },
   {
-    email: 'noemi@wevo.app', password: 'wevo1234', username: 'n0eheart', name: 'Noemi', age: 23,
+    uid: 'm5',
+    email: 'noemi@wevo.app', password: 'wevo1234', username: 'n0eheart', name: 'Noemi', displayName: 'Noemi', age: 23,
     bio: "Late night chat, co-op e un po' di chaos.", photoUrl: 'https://picsum.photos/seed/noemi23p/200/200',
     coverUrl: 'https://picsum.photos/seed/noemi23c/600/900', interests: ['Chat', 'Co-op', 'Music'],
     favoriteGames: ['Overcooked', 'The Sims 4', 'Roblox'], platforms: ['PC', 'Mobile'], lookingFor: ['Chill', 'Duo'],
     discordTag: 'n0eheart', spotifyArtist: 'PinkPantheress', country: 'Italia', timezone: 'CET',
     messages: [
-      { text: 'Facciamo un game e poi chat?', minutesAgo: 250, sender: 'other' },
-      { text: 'Volentieri! Che giochi hai?', minutesAgo: 248, sender: 'demo' },
-      { text: 'Overcooked per iniziare?', minutesAgo: 245, sender: 'other' },
+      { id: 'm5-msg-1', text: 'Facciamo un game e poi chat?', minutesAgo: 250, sender: 'other' },
+      { id: 'm5-msg-2', text: 'Volentieri! Che giochi hai?', minutesAgo: 248, sender: 'demo' },
+      { id: 'm5-msg-3', text: 'Overcooked per iniziare?', minutesAgo: 245, sender: 'other' },
     ],
   },
 ];
 
-async function ensureUser(account) {
+function matchIdFor(a, b) {
+  return [a, b].sort().join('_');
+}
+
+async function ensureAuthUser(account) {
   try {
-    return await createUserWithEmailAndPassword(auth, account.email, account.password);
+    await auth.createUser({
+      uid: account.uid,
+      email: account.email,
+      password: account.password,
+      displayName: account.displayName,
+    });
+    return 'created';
   } catch (error) {
-    if (error?.code === 'auth/email-already-in-use') {
-      return signInWithEmailAndPassword(auth, account.email, account.password);
+    if (error?.code === 'auth/uid-already-exists') {
+      await auth.updateUser(account.uid, {
+        email: account.email,
+        password: account.password,
+        displayName: account.displayName,
+      });
+      return 'updated';
     }
-    if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/user-not-found') {
-      return signInWithEmailAndPassword(auth, account.email, account.password);
+
+    if (error?.code === 'auth/email-already-exists') {
+      const existing = await auth.getUserByEmail(account.email);
+      if (existing.uid !== account.uid) {
+        console.warn(`⚠️ Email ${account.email} exists on uid ${existing.uid}, reusing existing auth uid instead of ${account.uid}`);
+        await auth.updateUser(existing.uid, {
+          email: account.email,
+          password: account.password,
+          displayName: account.displayName,
+        });
+        account.uid = existing.uid;
+      } else {
+        await auth.updateUser(account.uid, {
+          email: account.email,
+          password: account.password,
+          displayName: account.displayName,
+        });
+      }
+      return 'updated';
     }
+
     throw error;
   }
 }
 
-async function ensureProfile(uid, profile) {
-  const ref = doc(db, 'users', uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    await setDoc(ref, { uid, ...profile, matches: profile.matches ?? [] });
-    return;
-  }
-  await setDoc(ref, { uid, ...profile }, { merge: true });
-}
-
-function matchIdFor(a, b) {
-  return [a, b].sort().join('_');
+async function ensureProfile(profile, matches) {
+  await db.collection('users').doc(profile.uid).set({
+    uid: profile.uid,
+    name: profile.name,
+    username: profile.username,
+    age: profile.age,
+    email: profile.email,
+    bio: profile.bio,
+    photoUrl: profile.photoUrl,
+    coverUrl: profile.coverUrl,
+    interests: profile.interests,
+    favoriteGames: profile.favoriteGames,
+    platforms: profile.platforms,
+    lookingFor: profile.lookingFor,
+    discordTag: profile.discordTag ?? null,
+    steamId: profile.steamId ?? null,
+    spotifyArtist: profile.spotifyArtist ?? null,
+    riotId: profile.riotId ?? null,
+    timezone: profile.timezone,
+    country: profile.country,
+    matches,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
 }
 
 async function seedMessages(chatId, demoUid, otherUid, messages) {
@@ -143,115 +176,78 @@ async function seedMessages(chatId, demoUid, otherUid, messages) {
   let lastSenderId = null;
 
   for (const msg of messages) {
-    const ts = Timestamp.fromMillis(now - msg.minutesAgo * 60 * 1000);
+    const createdAt = Timestamp.fromMillis(now - msg.minutesAgo * 60 * 1000);
     const senderId = msg.sender === 'demo' ? demoUid : otherUid;
-    await addDoc(collection(db, 'chats', chatId, 'messages'), {
+    await db.collection('chats').doc(chatId).collection('messages').doc(msg.id).set({
       text: msg.text,
       senderId,
-      createdAt: ts,
-    });
+      createdAt,
+    }, { merge: true });
     lastMessage = msg.text;
-    lastMessageAt = ts;
+    lastMessageAt = createdAt;
     lastSenderId = senderId;
   }
 
   return { lastMessage, lastMessageAt, lastSenderId };
 }
 
+async function seedPair(demoUid, user) {
+  const authState = await ensureAuthUser(user);
+  await ensureProfile(user, [demoUid]);
+
+  const matchId = matchIdFor(demoUid, user.uid);
+  const now = FieldValue.serverTimestamp();
+
+  await db.collection('swipes').doc(`${demoUid}_${user.uid}`).set({
+    from: demoUid,
+    to: user.uid,
+    liked: true,
+    createdAt: now,
+  }, { merge: true });
+
+  await db.collection('swipes').doc(`${user.uid}_${demoUid}`).set({
+    from: user.uid,
+    to: demoUid,
+    liked: true,
+    createdAt: now,
+  }, { merge: true });
+
+  const seeded = await seedMessages(matchId, demoUid, user.uid, user.messages ?? []);
+
+  const sharedData = {
+    users: [demoUid, user.uid],
+    createdAt: now,
+    lastMessage: seeded.lastMessage,
+    lastMessageAt: seeded.lastMessageAt,
+    lastSenderId: seeded.lastSenderId,
+    updatedAt: now,
+  };
+
+  await db.collection('chats').doc(matchId).set(sharedData, { merge: true });
+  await db.collection('matches').doc(matchId).set(sharedData, { merge: true });
+
+  await db.collection('users').doc(demoUid).set({
+    matches: FieldValue.arrayUnion(user.uid),
+    updatedAt: now,
+  }, { merge: true });
+
+  await db.collection('users').doc(user.uid).set({
+    matches: FieldValue.arrayUnion(demoUid),
+    updatedAt: now,
+  }, { merge: true });
+
+  console.log(`✓ ${user.email} (${authState})`);
+}
+
 async function main() {
-  console.log('🌱 Seeding Wevo demo data');
+  console.log('🌱 Seeding Wevo demo data with firebase-admin');
 
-  const demoCred = await ensureUser(demoAccount);
-  const demoUid = demoCred.user.uid;
-
-  await ensureProfile(demoUid, {
-    name: demoAccount.name,
-    username: demoAccount.username,
-    age: demoAccount.age,
-    email: demoAccount.email,
-    bio: demoAccount.bio,
-    photoUrl: demoAccount.photoUrl,
-    coverUrl: demoAccount.coverUrl,
-    interests: demoAccount.interests,
-    favoriteGames: demoAccount.favoriteGames,
-    platforms: demoAccount.platforms,
-    lookingFor: demoAccount.lookingFor,
-    country: demoAccount.country,
-    timezone: demoAccount.timezone,
-    matches: [],
-  });
+  const demoAuthState = await ensureAuthUser(demoAccount);
+  await ensureProfile(demoAccount, demoUsers.map((user) => user.uid));
+  console.log(`✓ ${demoAccount.email} (${demoAuthState})`);
 
   for (const user of demoUsers) {
-    const cred = await ensureUser(user);
-    const otherUid = cred.user.uid;
-
-    await ensureProfile(otherUid, {
-      name: user.name,
-      username: user.username,
-      age: user.age,
-      email: user.email,
-      bio: user.bio,
-      photoUrl: user.photoUrl,
-      coverUrl: user.coverUrl,
-      interests: user.interests,
-      favoriteGames: user.favoriteGames,
-      platforms: user.platforms,
-      lookingFor: user.lookingFor,
-      discordTag: user.discordTag ?? null,
-      steamId: user.steamId ?? null,
-      spotifyArtist: user.spotifyArtist ?? null,
-      riotId: user.riotId ?? null,
-      timezone: user.timezone,
-      country: user.country,
-      matches: [demoUid],
-    });
-
-    const matchId = matchIdFor(demoUid, otherUid);
-    const swipeAB = doc(db, 'swipes', `${demoUid}_${otherUid}`);
-    const swipeBA = doc(db, 'swipes', `${otherUid}_${demoUid}`);
-    const matchRef = doc(db, 'matches', matchId);
-    const chatRef = doc(db, 'chats', matchId);
-
-    await setDoc(swipeAB, {
-      from: demoUid,
-      to: otherUid,
-      liked: true,
-      createdAt: Timestamp.now(),
-    }, { merge: true });
-
-    await setDoc(swipeBA, {
-      from: otherUid,
-      to: demoUid,
-      liked: true,
-      createdAt: Timestamp.now(),
-    }, { merge: true });
-
-    const seeded = await seedMessages(matchId, demoUid, otherUid, user.messages ?? []);
-
-    await setDoc(chatRef, {
-      users: [demoUid, otherUid],
-      createdAt: Timestamp.now(),
-      lastMessage: seeded.lastMessage,
-      lastMessageAt: seeded.lastMessageAt,
-      lastSenderId: seeded.lastSenderId,
-    }, { merge: true });
-
-    await setDoc(matchRef, {
-      users: [demoUid, otherUid],
-      createdAt: Timestamp.now(),
-      lastMessage: seeded.lastMessage,
-      lastMessageAt: seeded.lastMessageAt,
-      lastSenderId: seeded.lastSenderId,
-    }, { merge: true });
-
-    await updateDoc(doc(db, 'users', demoUid), {
-      matches: arrayUnion(otherUid),
-    });
-    await updateDoc(doc(db, 'users', otherUid), {
-      matches: arrayUnion(demoUid),
-    });
-
-    console.log(`✓ ${user.email} seeded`);
+    await seedPair(demoAccount.uid, user);
   }
 
   console.log('✅ Wevo seed complete');

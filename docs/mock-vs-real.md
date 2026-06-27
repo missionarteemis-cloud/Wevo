@@ -2,9 +2,9 @@
 
 ## Canonical seed path
 Use only:
-- `node scripts/seed.mjs`
+- `GOOGLE_APPLICATION_CREDENTIALS=~/.config/wevo/serviceAccount.json node scripts/seed.mjs`
 
-This is the canonical headless seeding direction for Wevo because the dataset includes real Firebase Auth users plus Firestore social data.
+This is the canonical headless seeding direction for Wevo because the dataset includes real Firebase Auth users plus Firestore social data, and it runs through `firebase-admin` instead of client SDK rules.
 
 ## What is real
 - Firebase project: `wevo-22275`
@@ -24,7 +24,7 @@ This is the canonical headless seeding direction for Wevo because the dataset in
 - if demo data is needed, it must be written into Firestore in realistic form
 - auth-user creation belongs to the headless seeder, not to standalone Dart CLI
 - hidden UI fallbacks should be reduced over time, because they distort debugging
-- the current `scripts/seed.mjs` direction is correct, but still needs firebase-admin or equivalent permission bypass because client SDK writes are blocked by Firestore rules
+- the canonical `scripts/seed.mjs` now uses `firebase-admin` with `GOOGLE_APPLICATION_CREDENTIALS` pointing to a service-account JSON stored outside the repo
 - older seed scripts are removed to avoid ambiguity
 
 ## Legacy overlapping seed scripts to retire
@@ -36,3 +36,9 @@ This is the canonical headless seeding direction for Wevo because the dataset in
 
 ## Why this matters
 We already saw that fake users and mixed seed strategies can make matching behavior look healthier than it really is. Wevo needs realistic loops, not comforting illusions.
+
+## Credential handling
+- Generate the service-account key manually in Firebase Console.
+- Store the JSON outside the repo, for example `~/.config/wevo/serviceAccount.json`.
+- Never hardcode the path in source, never commit the JSON, never print the secret.
+- Run the seed by exporting `GOOGLE_APPLICATION_CREDENTIALS` inline or in the shell environment.

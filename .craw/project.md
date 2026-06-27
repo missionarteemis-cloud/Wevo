@@ -12,7 +12,7 @@
 - Analyze focused app code: `flutter analyze lib`
 - Run web locally: `flutter run -d chrome`
 - Build web: `flutter build web`
-- Seed headless dataset: `node scripts/seed.mjs` (temporary client-SDK version, blocked by Firestore rules until upgraded to firebase-admin)
+- Seed headless dataset: `GOOGLE_APPLICATION_CREDENTIALS=~/.config/wevo/serviceAccount.json node scripts/seed.mjs`
 - Seed in-app dev dataset: trigger `SeedService.seedDemoData()` from the profile dev action inside the Flutter app
 
 ## Architecture in 5 lines
@@ -28,7 +28,7 @@
 - `~/Wevo` is legacy dead material from `nemis_app` days and should be archived, not developed further.
 - We prioritize real Firestore-backed flows over in-app mock fallbacks, because the match logic already got distorted by fake data.
 - `bin/seed.dart` was a false canonical path and was removed, because Flutter Firebase plugins cannot be used from standalone Dart CLI.
-- Current canonical direction is Node headless seeding for auth users plus Firestore docs; the current client-SDK version still needs upgrade to firebase-admin or rule support.
+- Current canonical seeding path is `scripts/seed.mjs` via `firebase-admin`, with credentials injected through `GOOGLE_APPLICATION_CREDENTIALS` pointing to a JSON key stored outside the repo.
 - `SeedService` remains an in-app dev convenience only, not the canonical seeding channel.
 - The game layer waits until the social core is documented, seeded coherently, and technically stable.
 
@@ -37,4 +37,5 @@
 - A project without `.craw/project.md` forces expensive reconstruction from daily memory. Don’t repeat that.
 - Multiple seed scripts are not flexibility, they are drift. Keep one canonical path.
 - A seed path that cannot run in its target runtime is worse than no seed path. Validate the execution environment before declaring it canonical.
+- FlutterFire plugins do not make a real standalone Dart CLI seeder. For headless Firebase auth/doc writes, use `firebase-admin` through Node with external credentials.
 - `flutter analyze` on the full repo will also analyze scripts and stale experiments, so scope the gate intentionally when needed.
