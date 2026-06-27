@@ -8,7 +8,7 @@ initializeApp();
 const db = getFirestore();
 const STARTER_COINS = 500;
 
-export const grantStarterCoins = beforeUserCreated(async (event) => {
+export const grantStarterCoins = beforeUserCreated({ region: 'us-central1' }, async (event) => {
   const user = event.data;
   if (!user?.uid) return;
 
@@ -24,7 +24,7 @@ export const grantStarterCoins = beforeUserCreated(async (event) => {
   );
 });
 
-export const buyItem = onCall(async (request) => {
+export const buyItem = onCall({ region: 'us-central1' }, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError('unauthenticated', 'Authentication required.');
   }
