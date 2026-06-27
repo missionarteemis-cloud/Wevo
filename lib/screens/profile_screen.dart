@@ -6,6 +6,7 @@ import '../services/user_service.dart';
 import '../services/storage_service.dart';
 import '../services/seed_service.dart';
 import '../theme.dart';
+import 'room_screen.dart';
 
 const _allInterests = [
   'Gaming', 'FPS', 'MOBA', 'Co-op', 'Anime', 'Tech', 'Design', 'Music', 'Community', 'Chill',
@@ -286,6 +287,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 15),
             ),
           ),
+
+        const SizedBox(height: 18),
+
+        // ── Entra nella tua stanza (game layer) ──
+        GestureDetector(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const RoomScreen()),
+          ),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: WevoColors.brand,
+              boxShadow: [wevoGlow(WevoColors.pink, blur: 24)],
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.home_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Text(
+                  'Entra nella tua stanza',
+                  style: TextStyle(
+                    fontFamily: 'Plus Jakarta Sans',
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
 
         const SizedBox(height: 30),
 

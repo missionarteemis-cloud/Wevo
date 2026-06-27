@@ -39,6 +39,7 @@ dependencies:
   cloud_firestore: ^6.3.0
   firebase_storage: ^13.3.0
   image_picker: ^1.1.2
+  flame: ^1.18.0   # game layer: stanza isometrica (vedi docs/game-layer.md)
 
 
 dev_dependencies:
