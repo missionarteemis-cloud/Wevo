@@ -126,4 +126,22 @@ Principio chiave: la coerenza viene dalla **spec**, non dalla fonte. Definire un
 ## 17. Interazioni di editing (refinement Diego, 2026-06-27)
 - **Selezione per silhouette:** toccare **qualunque pixel** di un oggetto lo seleziona (non solo la cella base) → mostra il riquadro descrizione. Hit-test sul poligono renderizzato, front-most prima. Toccare il pavimento muove l'avatar.
 - **Pathfinding:** l'avatar **aggira** gli ostacoli seguendo il percorso più corto fino al punto toccato (BFS 4-direzioni sulle celle libere). Niente più clipping/attraversamento.
-- **Spostamento mobili (Sposta) — da implementare:** entrando in modalità sposta, appare un'**anteprima "fantasma"** del mobile (semi-trasparente, **visibile solo a chi sposta**) che segue il cursore / si posiziona sulla cella toccata (mobile). **Ri-toccare la stessa posizione conferma** lo spostamento → salva su `rooms/{uid}`. Ruota analogo. "Prendi" → inventario.
+- **Spostamento mobili (Sposta) — FATTO:** modalità sposta con **anteprima "fantasma"** (semi-trasparente, verde=valido/rosso=invalido, solo per chi sposta), tocco per posizionare, **ri-tocco sulla stessa cella conferma**, salva su `rooms/{uid}`. Ruota FATTO. "Prendi" → inventario (richiede backend inventario, §18).
+
+## 18. Store + valuta + inventario (design, 2026-06-27)
+Store interno per comprare oggetti virtuali con **coins**. UI: **finestra hover draggabile**, minimal per ora, divisa per **Tipo** (tab): `arredi`, `crediti`, `vestiti`, `evento` (sotto-categorie più avanti).
+
+### Dati (Firestore)
+- `catalog/{itemId}` (**client read-only**, già nelle regole): `{ name, description, price, type:"arredi"|"crediti"|"vestiti"|"evento", category?, footprint:{w,h}, rotatable, interaction, assetRef, props:{} }`. È la fonte dello store.
+- `users/{uid}.coins` (**client read-only**): saldo. Coins iniziali (es. 500) concessi **server-side** alla creazione account (Cloud Function `onCreate` o seed per i demo) — il client non può scriverli.
+- `users/{uid}/inventory/{instanceId}` (**client read-only**): `{ itemId, acquiredAt }` — posseduti non piazzati.
+
+### Acquisto (server-authoritative, anti-cheat)
+- Cloud Function **`buyItem({itemId})`**: verifica `catalog price ≤ coins` in **transazione** → scala coins + crea inventory instance. Ritorna `{ok}` o `{error:'insufficient'}`. Il client **non** scrive mai coins/inventory direttamente.
+
+### Piazzamento (inventario ↔ stanza)
+- "Prendi" (stanza→inventario) e piazza (inventario→stanza) di un oggetto **già posseduto**: cambia solo posizione, non crea valore. Via Cloud Function `placeItem`/`takeItem` (o regole mirate). Da definire con lo store.
+
+### Responsabilità
+- **Backend (Craw):** collezione `catalog` + **seed catalogo** (Node admin), coins iniziali server-side, **Cloud Function `buyItem`** (setup Functions + deploy), poi place/take.
+- **Frontend (Claude):** **finestra store draggabile** (tab per Tipo, lista item con prezzo + Compra, saldo coins), lettura `catalog`, chiamata `buyItem`, inventario UI + piazzamento dal fantasma.

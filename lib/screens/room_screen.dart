@@ -6,6 +6,7 @@ import '../game/room_game.dart';
 import '../models/room_model.dart';
 import '../services/room_service.dart';
 import '../theme.dart';
+import 'store_window.dart';
 
 /// Schermata stanza — game layer (vedi docs/game-layer.md).
 class RoomScreen extends StatefulWidget {
@@ -19,6 +20,8 @@ class _RoomScreenState extends State<RoomScreen> {
   final RoomGame _game = RoomGame();
   String _roomName = 'La tua stanza';
   String? _error;
+  bool _storeOpen = false;
+  Offset _storePos = const Offset(20, 96);
 
   @override
   void initState() {
@@ -64,8 +67,22 @@ class _RoomScreenState extends State<RoomScreen> {
             top: 0,
             left: 0,
             right: 0,
-            child: _Header(roomName: _roomName),
+            child: _Header(
+              roomName: _roomName,
+              onStore: () => setState(() => _storeOpen = !_storeOpen),
+            ),
           ),
+
+          // Finestra store draggabile
+          if (_storeOpen)
+            Positioned(
+              left: _storePos.dx,
+              top: _storePos.dy,
+              child: StoreWindow(
+                onDrag: (delta) => setState(() => _storePos += delta),
+                onClose: () => setState(() => _storeOpen = false),
+              ),
+            ),
 
           // Riquadro descrizione / pannello spostamento (basso destra)
           Positioned(
@@ -281,7 +298,8 @@ class _MiniAction extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   final String roomName;
-  const _Header({required this.roomName});
+  final VoidCallback onStore;
+  const _Header({required this.roomName, required this.onStore});
 
   @override
   Widget build(BuildContext context) {
@@ -327,6 +345,8 @@ class _Header extends StatelessWidget {
                 ],
               ),
             ),
+            _CircleBtn(icon: Icons.storefront, onTap: onStore),
+            const SizedBox(width: 8),
             _CircleBtn(icon: Icons.inventory_2_outlined, onTap: () {}),
             const SizedBox(width: 8),
             _CircleBtn(
