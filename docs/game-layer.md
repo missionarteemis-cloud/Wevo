@@ -122,3 +122,8 @@ Principio chiave: la coerenza viene dalla **spec**, non dalla fonte. Definire un
 - **Spec arte:** tile base 64×32, angolo iso 2:1, direzione luce fissa, palette neon Wevo. Ogni oggetto = sprite per ciascuna rotazione, ancorato alla cella.
 - **Manifest** (`assets/furniture/manifest.json`): `assetRef → { file, anchor, frames per rotazione, footprint }`. Aggiungere un mobile = droppare lo sprite + una riga di manifest (zero codice).
 - **Fonti (in ordine pratico):** (1) prototipo → pack CC0 **Kenney.nl** / itch.io per non bloccare le meccaniche; (2) identità → **artista su commissione** (itch.io/Fiverr) per un set coeso, OPPURE **AI pixel-art specializzata** (Retro Diffusion, PixelLab.ai) o **ComfyUI** locale con LoRA pixel/iso; (3) cleanup/palette in **Aseprite**. Le meccaniche si costruiscono su placeholder; l'arte vera si infila dopo via manifest.
+
+## 17. Interazioni di editing (refinement Diego, 2026-06-27)
+- **Selezione per silhouette:** toccare **qualunque pixel** di un oggetto lo seleziona (non solo la cella base) → mostra il riquadro descrizione. Hit-test sul poligono renderizzato, front-most prima. Toccare il pavimento muove l'avatar.
+- **Pathfinding:** l'avatar **aggira** gli ostacoli seguendo il percorso più corto fino al punto toccato (BFS 4-direzioni sulle celle libere). Niente più clipping/attraversamento.
+- **Spostamento mobili (Sposta) — da implementare:** entrando in modalità sposta, appare un'**anteprima "fantasma"** del mobile (semi-trasparente, **visibile solo a chi sposta**) che segue il cursore / si posiziona sulla cella toccata (mobile). **Ri-toccare la stessa posizione conferma** lo spostamento → salva su `rooms/{uid}`. Ruota analogo. "Prendi" → inventario.

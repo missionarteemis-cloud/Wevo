@@ -9,11 +9,12 @@ import '../models/room_model.dart';
 import '../theme.dart';
 import 'furniture_catalog.dart';
 
-/// Game layer — slice game room (vedi docs/game-layer.md).
+/// Game layer — stanza isometrica (vedi docs/game-layer.md).
 ///
-/// Stanza isometrica: griglia + arredo reale (da Firestore via RoomService) con
-/// rendering multi-cella, ordinamento per profondità, collisione (no clipping)
-/// e selezione oggetto. Movimento avatar a snap su tap.
+/// Arredo reale (Firestore via RoomService), rendering multi-cella con
+/// ordinamento per profondità, selezione oggetto a livello di **silhouette**
+/// (qualunque pixel dell'oggetto), e movimento avatar con **pathfinding**
+/// (aggira gli ostacoli, niente clipping).
 class RoomGame extends FlameGame {
   /// Item selezionato (alimenta il riquadro descrizione in RoomScreen).
   final ValueNotifier<RoomFurnitureItem?> selected = ValueNotifier(null);
@@ -38,13 +39,25 @@ class RoomGame extends FlameGame {
   }
 }
 
+/// Geometria del box isometrico di un mobile (corner base + corner rialzati).
+typedef _BoxPoints = ({
+  Offset topC,
+  Offset rightC,
+  Offset bottomC,
+  Offset leftC,
+  Offset t2,
+  Offset r2,
+  Offset b2,
+  Offset l2,
+});
+
 class IsoRoom extends PositionComponent
     with TapCallbacks, HasGameReference<RoomGame> {
   IsoRoom({required this.selected});
 
   final ValueNotifier<RoomFurnitureItem?> selected;
 
-  // ── Geometria griglia isometrica ──
+  // ── Geometria griglia ──
   static const int cols = 7;
   static const int rows = 7;
   static const double tileW = 64;
@@ -53,13 +66,15 @@ class IsoRoom extends PositionComponent
 
   final Vector2 _origin = Vector2.zero();
 
-  // Avatar (pixel = centro casella corrente)
+  // Avatar: casella logica + posizione pixel + percorso da seguire
+  int _avatarCol = cols ~/ 2;
+  int _avatarRow = rows ~/ 2;
   final Vector2 _avatarPos = Vector2.zero();
-  final Vector2 _targetPos = Vector2.zero();
-  int _targetCol = cols ~/ 2;
-  int _targetRow = rows ~/ 2;
+  List<(int, int)> _path = const [];
+  int _destCol = cols ~/ 2;
+  int _destRow = rows ~/ 2;
 
-  // Arredo + celle occupate (collisione)
+  // Arredo + celle occupate
   List<RoomFurnitureItem> _furniture = const [];
   final Set<int> _occupied = <int>{};
 
@@ -93,8 +108,7 @@ class IsoRoom extends PositionComponent
   Future<void> onLoad() async {
     size = game.size;
     _recomputeOrigin();
-    _avatarPos.setFrom(_tileCenter(_targetCol, _targetRow));
-    _targetPos.setFrom(_avatarPos);
+    _syncAvatarPixel();
   }
 
   @override
@@ -102,12 +116,13 @@ class IsoRoom extends PositionComponent
     super.onGameResize(newSize);
     size = newSize;
     _recomputeOrigin();
-    _targetPos.setFrom(_tileCenter(_targetCol, _targetRow));
-    _avatarPos.setFrom(_targetPos);
+    _syncAvatarPixel();
   }
 
   @override
   bool containsLocalPoint(Vector2 point) => true;
+
+  void _syncAvatarPixel() => _avatarPos.setFrom(_tileCenter(_avatarCol, _avatarRow));
 
   // ── Arredo / collisione ──
   void setFurniture(List<RoomFurnitureItem> items) {
@@ -135,26 +150,20 @@ class IsoRoom extends PositionComponent
   }
 
   int _key(int c, int r) => r * cols + c;
+  bool _inBounds(int c, int r) => c >= 0 && c < cols && r >= 0 && r < rows;
   bool _isOccupied(int c, int r) => _occupied.contains(_key(c, r));
 
-  RoomFurnitureItem? _furnitureAt(int c, int r) {
-    for (final item in _furniture) {
-      for (final (fc, fr) in _footprintTiles(item)) {
-        if (fc == c && fr == r) return item;
-      }
-    }
-    return null;
-  }
-
   void _ensureAvatarOffFurniture() {
-    if (!_isOccupied(_targetCol, _targetRow)) return;
+    if (!_isOccupied(_avatarCol, _avatarRow)) return;
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
         if (!_isOccupied(c, r)) {
-          _targetCol = c;
-          _targetRow = r;
-          _targetPos.setFrom(_tileCenter(c, r));
-          _avatarPos.setFrom(_targetPos);
+          _avatarCol = c;
+          _avatarRow = r;
+          _destCol = c;
+          _destRow = r;
+          _path = const [];
+          _syncAvatarPixel();
           return;
         }
       }
@@ -183,35 +192,129 @@ class IsoRoom extends PositionComponent
     return (c.round().clamp(0, cols - 1), r.round().clamp(0, rows - 1));
   }
 
-  // ── Input: tocco oggetto = seleziona; tocco a vuoto = muovi ──
-  @override
-  void onTapDown(TapDownEvent event) {
-    final (col, row) = _pixelToTile(event.localPosition);
-    final item = _furnitureAt(col, row);
-    if (item != null) {
-      selected.value = item;
-      return;
-    }
-    if (_isOccupied(col, row)) return; // collisione: niente movimento qui
-    selected.value = null;
-    _targetCol = col;
-    _targetRow = row;
-    _targetPos.setFrom(_tileCenter(col, row));
+  // ── Box geometry / hit-test silhouette ──
+  _BoxPoints _boxPoints(RoomFurnitureItem item) {
+    final def = furnitureDef(item.itemId);
+    final (w, h) = footprintWH(def, item.rot);
+    final ph = def.height;
+    final back = _tileCenter(item.x, item.y);
+    final rightT = _tileCenter(item.x + w - 1, item.y);
+    final frontT = _tileCenter(item.x + w - 1, item.y + h - 1);
+    final leftT = _tileCenter(item.x, item.y + h - 1);
+    final topC = Offset(back.x, back.y - tileH / 2);
+    final rightC = Offset(rightT.x + tileW / 2, rightT.y);
+    final bottomC = Offset(frontT.x, frontT.y + tileH / 2);
+    final leftC = Offset(leftT.x - tileW / 2, leftT.y);
+    return (
+      topC: topC,
+      rightC: rightC,
+      bottomC: bottomC,
+      leftC: leftC,
+      t2: topC.translate(0, -ph),
+      r2: rightC.translate(0, -ph),
+      b2: bottomC.translate(0, -ph),
+      l2: leftC.translate(0, -ph),
+    );
   }
 
-  // ── Movimento (snap interpolato) ──
+  List<Offset> _silhouette(RoomFurnitureItem item) {
+    final g = _boxPoints(item);
+    return [g.leftC, g.bottomC, g.rightC, g.r2, g.t2, g.l2];
+  }
+
+  bool _pointInPoly(Offset p, List<Offset> poly) {
+    var inside = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      final a = poly[i];
+      final b = poly[j];
+      if (((a.dy > p.dy) != (b.dy > p.dy)) &&
+          (p.dx < (b.dx - a.dx) * (p.dy - a.dy) / (b.dy - a.dy) + a.dx)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  /// Item la cui silhouette contiene il punto, front-most prima.
+  RoomFurnitureItem? _furnitureAtPixel(Vector2 p) {
+    final pt = Offset(p.x, p.y);
+    final sorted = [..._furniture]
+      ..sort((a, b) => _furnitureBaseY(b).compareTo(_furnitureBaseY(a)));
+    for (final item in sorted) {
+      if (_pointInPoly(pt, _silhouette(item))) return item;
+    }
+    return null;
+  }
+
+  // ── Pathfinding (BFS, 4-direzioni, aggira gli occupati) ──
+  List<(int, int)> _findPath(int sc, int sr, int gc, int gr) {
+    if (sc == gc && sr == gr) return const [];
+    final prev = <int, int>{};
+    final visited = <int>{_key(sc, sr)};
+    final queue = <(int, int)>[(sc, sr)];
+    const dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+    var found = false;
+    while (queue.isNotEmpty) {
+      final (cc, cr) = queue.removeAt(0);
+      if (cc == gc && cr == gr) {
+        found = true;
+        break;
+      }
+      for (final (dc, dr) in dirs) {
+        final nc = cc + dc;
+        final nr = cr + dr;
+        if (!_inBounds(nc, nr)) continue;
+        final k = _key(nc, nr);
+        if (visited.contains(k)) continue;
+        if (_isOccupied(nc, nr)) continue;
+        visited.add(k);
+        prev[k] = _key(cc, cr);
+        queue.add((nc, nr));
+      }
+    }
+    if (!found) return const [];
+    final path = <(int, int)>[];
+    var k = _key(gc, gr);
+    final startK = _key(sc, sr);
+    while (k != startK) {
+      path.add((k % cols, k ~/ cols));
+      k = prev[k]!;
+    }
+    return path.reversed.toList();
+  }
+
+  // ── Input: silhouette oggetto = seleziona; pavimento = pathfind ──
+  @override
+  void onTapDown(TapDownEvent event) {
+    final local = event.localPosition;
+    final hit = _furnitureAtPixel(local);
+    if (hit != null) {
+      selected.value = hit;
+      return;
+    }
+    final (col, row) = _pixelToTile(local);
+    if (_isOccupied(col, row)) return;
+    selected.value = null;
+    _destCol = col;
+    _destRow = row;
+    _path = _findPath(_avatarCol, _avatarRow, col, row);
+  }
+
+  // ── Movimento lungo il percorso ──
   @override
   void update(double dt) {
     super.update(dt);
-    final delta = _targetPos - _avatarPos;
+    if (_path.isEmpty) return;
+    final (nc, nr) = _path.first;
+    final dest = _tileCenter(nc, nr);
+    final delta = dest - _avatarPos;
     final dist = delta.length;
-    if (dist < 0.5) {
-      _avatarPos.setFrom(_targetPos);
-      return;
-    }
     final step = _speed * dt;
     if (step >= dist) {
-      _avatarPos.setFrom(_targetPos);
+      _avatarPos.setFrom(dest);
+      _avatarCol = nc;
+      _avatarRow = nr;
+      _path = _path.sublist(1);
     } else {
       _avatarPos.add(delta.normalized() * step);
     }
@@ -222,7 +325,7 @@ class IsoRoom extends PositionComponent
   void render(Canvas canvas) {
     super.render(canvas);
     _renderFloor(canvas);
-    _renderTargetHighlight(canvas);
+    _renderHighlight(canvas);
     _renderObjects(canvas);
   }
 
@@ -243,11 +346,11 @@ class IsoRoom extends PositionComponent
     }
   }
 
-  void _renderTargetHighlight(Canvas canvas) {
-    canvas.drawPath(_diamond(_tileCenter(_targetCol, _targetRow)), _highlight);
+  void _renderHighlight(Canvas canvas) {
+    if (_path.isEmpty) return; // mostra il bersaglio solo mentre si muove
+    canvas.drawPath(_diamond(_tileCenter(_destCol, _destRow)), _highlight);
   }
 
-  /// Painter's algorithm: arredo + avatar ordinati per y della base.
   void _renderObjects(Canvas canvas) {
     final renderables = <(double, void Function())>[
       for (final item in _furniture)
@@ -269,55 +372,38 @@ class IsoRoom extends PositionComponent
 
   void _drawFurniture(Canvas canvas, RoomFurnitureItem item) {
     final def = furnitureDef(item.itemId);
-    final (w, h) = footprintWH(def, item.rot);
-    final ph = def.height;
-
-    // Angoli esterni del rettangolo-footprint (in iso)
-    final back = _tileCenter(item.x, item.y);
-    final rightT = _tileCenter(item.x + w - 1, item.y);
-    final frontT = _tileCenter(item.x + w - 1, item.y + h - 1);
-    final leftT = _tileCenter(item.x, item.y + h - 1);
-    final topC = Offset(back.x, back.y - tileH / 2);
-    final rightC = Offset(rightT.x + tileW / 2, rightT.y);
-    final bottomC = Offset(frontT.x, frontT.y + tileH / 2);
-    final leftC = Offset(leftT.x - tileW / 2, leftT.y);
-    // Angoli rialzati (faccia superiore)
-    final t2 = topC.translate(0, -ph);
-    final r2 = rightC.translate(0, -ph);
-    final b2 = bottomC.translate(0, -ph);
-    final l2 = leftC.translate(0, -ph);
+    final g = _boxPoints(item);
 
     // Faccia sinistra
     canvas.drawPath(
       Path()
-        ..moveTo(leftC.dx, leftC.dy)
-        ..lineTo(bottomC.dx, bottomC.dy)
-        ..lineTo(b2.dx, b2.dy)
-        ..lineTo(l2.dx, l2.dy)
+        ..moveTo(g.leftC.dx, g.leftC.dy)
+        ..lineTo(g.bottomC.dx, g.bottomC.dy)
+        ..lineTo(g.b2.dx, g.b2.dy)
+        ..lineTo(g.l2.dx, g.l2.dy)
         ..close(),
       Paint()..color = _darken(def.color, 0.45),
     );
     // Faccia destra
     canvas.drawPath(
       Path()
-        ..moveTo(bottomC.dx, bottomC.dy)
-        ..lineTo(rightC.dx, rightC.dy)
-        ..lineTo(r2.dx, r2.dy)
-        ..lineTo(b2.dx, b2.dy)
+        ..moveTo(g.bottomC.dx, g.bottomC.dy)
+        ..lineTo(g.rightC.dx, g.rightC.dy)
+        ..lineTo(g.r2.dx, g.r2.dy)
+        ..lineTo(g.b2.dx, g.b2.dy)
         ..close(),
       Paint()..color = _darken(def.color, 0.25),
     );
     // Faccia superiore
     final top = Path()
-      ..moveTo(t2.dx, t2.dy)
-      ..lineTo(r2.dx, r2.dy)
-      ..lineTo(b2.dx, b2.dy)
-      ..lineTo(l2.dx, l2.dy)
+      ..moveTo(g.t2.dx, g.t2.dy)
+      ..lineTo(g.r2.dx, g.r2.dy)
+      ..lineTo(g.b2.dx, g.b2.dy)
+      ..lineTo(g.l2.dx, g.l2.dy)
       ..close();
     canvas.drawPath(top, Paint()..color = def.color);
     canvas.drawPath(top, _furnEdge);
 
-    // Bordo selezione
     if (selected.value?.instanceId == item.instanceId) {
       canvas.drawPath(top, _selEdge);
     }
