@@ -1,5 +1,7 @@
 # Wevo game design notes
 
+> ➡️ **Il design canonico e dettagliato del game layer è in [`docs/game-layer.md`](docs/game-layer.md)** (decisioni prese, modello dati Firestore+RTDB, regola disponibilità stanza, scope v1, stile, primo slice). Questo file resta come visione di alto livello; le "Questions to answer" qui sotto sono ormai **risposte** in `docs/game-layer.md`.
+
 This file is intentionally future-facing. The game layer does not start until the social core is stable.
 
 ## Design intent

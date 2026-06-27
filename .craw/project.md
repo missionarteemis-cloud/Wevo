@@ -38,4 +38,8 @@
 - Multiple seed scripts are not flexibility, they are drift. Keep one canonical path.
 - A seed path that cannot run in its target runtime is worse than no seed path. Validate the execution environment before declaring it canonical.
 - FlutterFire plugins do not make a real standalone Dart CLI seeder. For headless Firebase auth/doc writes, use `firebase-admin` through Node with external credentials.
+- The seeded Firestore verification is now real: browser snapshot in Firebase shows `users`, `swipes`, `matches`, `chats` populated in `wevo-22275`, including mixed legacy/new auth UIDs reused by the admin seeder.
+- `flutter build web --no-wasm-dry-run` passes again after recreating `build/ios/SourcePackages` and `build/macos/SourcePackages` post-clean. The supposed `wevo` / `wevo_app` rename mismatch was a false lead; the real blocker was broken build-path setup for plugin copy.
+- A durable integration test now exists for the real flow (demo login → discover like → match overlay → matches → send chat message). Chromedriver on `:4444` is now wired and `flutter drive` reaches the web runner, but the current Flutter web toolchain crashes in `dwds/flutter drive` (`AppConnectionException` / localhost connection refused) before test execution. The remaining blocker is the web integration harness stability, not app wiring.
+- Future note only, not for now: this integration test writes against real Firestore demo data. Move it to Firebase Emulator when test isolation becomes worth the complexity.
 - `flutter analyze` on the full repo will also analyze scripts and stale experiments, so scope the gate intentionally when needed.
