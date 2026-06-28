@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -116,11 +117,17 @@ class _MatchesScreenState extends State<MatchesScreen> {
   }
 
   Widget _desktopLayout() {
-    return Row(
+    return Stack(
       children: [
-        SizedBox(width: 380, child: _matchList()),
-        Container(width: 1, color: Colors.white.withOpacity(0.06)),
-        Expanded(child: _selected != null ? _chatThread(mobile: false) : _emptyChat()),
+        const Positioned(top: -80, left: -50, child: _AmbientOrb(size: 180, color: Color(0x14FA61A6))),
+        const Positioned(bottom: 60, right: -40, child: _AmbientOrb(size: 220, color: Color(0x106DD7D7))),
+        Row(
+          children: [
+            SizedBox(width: 400, child: _matchList()),
+            Container(width: 1, color: Colors.white.withOpacity(0.06)),
+            Expanded(child: _selected != null ? _chatThread(mobile: false) : _emptyChat()),
+          ],
+        ),
       ],
     );
   }
@@ -130,43 +137,72 @@ class _MatchesScreenState extends State<MatchesScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(22, 30, 22, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              GestureDetector(
-                onTap: () => MainShellState.switchTab(0),
-                child: ShaderMask(
-                  shaderCallback: (r) => const LinearGradient(colors: [
-                    WevoColors.pink, Color(0xFFB98AE6), Color(0xFF8EC5FF), Color(0xFF5FE0C5),
-                  ]).createShader(r),
-                  child: const Text('wevo', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 30, fontWeight: FontWeight.w600, color: Colors.white)),
+          padding: const EdgeInsets.fromLTRB(22, 28, 22, 12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0x22FFFFFF), Color(0x10FFFFFF)],
+                  ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.16), blurRadius: 26, offset: const Offset(0, 14)),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 12),
-              const Text('Matches', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 22, fontWeight: FontWeight.w600, color: Colors.white)),
-              const SizedBox(height: 16),
-              Row(
-                children: ['Tutte', 'Online', 'Nuove'].map((f) {
-                  final active = _groupFilter == f;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _groupFilter = f),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(30),
-                          color: active ? WevoColors.pink.withOpacity(0.15) : Colors.white.withOpacity(0.04),
-                          border: Border.all(color: active ? WevoColors.pink.withOpacity(0.5) : Colors.white.withOpacity(0.08)),
-                        ),
-                        child: Text(f, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: active ? WevoColors.pink : WevoColors.textMuted)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: () => MainShellState.switchTab(0),
+                      child: ShaderMask(
+                        shaderCallback: (r) => const LinearGradient(colors: [
+                          WevoColors.pink, Color(0xFFB98AE6), Color(0xFF8EC5FF), Color(0xFF5FE0C5),
+                        ]).createShader(r),
+                        child: const Text('wevo', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 30, fontWeight: FontWeight.w600, color: Colors.white)),
                       ),
                     ),
-                  );
-                }).toList(),
+                    const SizedBox(height: 12),
+                    const Text('Matches', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 23, fontWeight: FontWeight.w700, color: Colors.white)),
+                    const SizedBox(height: 5),
+                    const Text(
+                      'Le conversazioni migliori non sembrano una inbox. Sembrano un posto dove tornare.',
+                      style: TextStyle(color: WevoColors.textMuted, fontSize: 13.5, height: 1.35),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: ['Tutte', 'Online', 'Nuove'].map((f) {
+                        final active = _groupFilter == f;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: GestureDetector(
+                            onTap: () => setState(() => _groupFilter = f),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(999),
+                                gradient: active
+                                    ? const LinearGradient(colors: [Color(0x22FA61A6), Color(0x166DD7D7)])
+                                    : null,
+                                color: active ? null : Colors.white.withOpacity(0.04),
+                                border: Border.all(color: active ? WevoColors.pink.withOpacity(0.45) : Colors.white.withOpacity(0.08)),
+                              ),
+                              child: Text(f, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: active ? Colors.white : WevoColors.textMuted)),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
         Expanded(
@@ -191,9 +227,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Text(
-                            _groupFilter == 'Nuove'
-                                ? 'Nessuna chat nuova al momento.'
-                                : 'Nessun match visibile con questo filtro.',
+                            _groupFilter == 'Nuove' ? 'Nessuna chat nuova al momento.' : 'Nessun match visibile con questo filtro.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: WevoColors.textMuted, fontSize: 14),
                           ),
@@ -209,7 +243,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                     }
 
                     return ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
                       itemCount: visibleMatches.length,
                       itemBuilder: (_, i) => _matchTile(visibleMatches[i], previews[visibleMatches[i].id]),
                     );
@@ -265,100 +299,124 @@ class _MatchesScreenState extends State<MatchesScreen> {
     final variant = _variantFor(user);
     final isUnread = preview != null && preview['lastSenderId'] != null && preview['lastSenderId'] != ChatService.currentUid;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: isActive ? WevoColors.pink.withOpacity(0.1) : Colors.transparent,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () => _selectChat(user),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Stack(
-                  children: [
-                    Container(
-                      width: 52, height: 52,
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(colors: [WevoColors.pink, Color(0xFFB98AE6)]),
-                      ),
-                      child: CircleAvatar(
-                        backgroundColor: const Color(0xFF1A1128),
-                        backgroundImage: user.photoUrl.isNotEmpty ? NetworkImage(user.photoUrl) : null,
-                        child: user.photoUrl.isEmpty ? Text(user.name[0].toUpperCase(), style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.w600, color: Color(0xFFFFB6D4), fontSize: 18)) : null,
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0, right: 0,
-                      child: Container(
-                        width: 14, height: 14,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFF9EDFA6),
-                          border: Border.all(color: const Color(0xFF0E0718), width: 2),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(26),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: isActive
+                  ? const LinearGradient(colors: [Color(0x22FA61A6), Color(0x126DD7D7)])
+                  : const LinearGradient(colors: [Color(0x12FFFFFF), Color(0x08FFFFFF)]),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: isActive ? WevoColors.pink.withOpacity(0.32) : Colors.white.withOpacity(0.06)),
+              boxShadow: [
+                if (isActive) wevoGlow(WevoColors.pink, blur: 20),
+                if (!isActive) BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 18, offset: const Offset(0, 10)),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(26),
+                onTap: () => _selectChat(user),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
                     children: [
-                      Row(
+                      Stack(
                         children: [
-                          Text(user.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white)),
-                          const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            width: 56,
+                            height: 56,
+                            padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(30),
-                              color: WevoColors.sage.withOpacity(0.12),
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(colors: [WevoColors.pink, Color(0xFFB98AE6), Color(0xFF8EC5FF)]),
+                              boxShadow: [wevoGlow(WevoColors.pink, blur: 16)],
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                            child: CircleAvatar(
+                              backgroundColor: const Color(0xFF1A1128),
+                              backgroundImage: user.photoUrl.isNotEmpty ? NetworkImage(user.photoUrl) : null,
+                              child: user.photoUrl.isEmpty ? Text(user.name[0].toUpperCase(), style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.w600, color: Color(0xFFFFB6D4), fontSize: 18)) : null,
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFF9EDFA6),
+                                border: Border.all(color: const Color(0xFF0E0718), width: 2),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
                               children: [
-                                Icon(variant.icon, size: 11, color: variant.color),
-                                const SizedBox(width: 4),
-                                Text(variant.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: variant.color)),
+                                Expanded(
+                                  child: Text(user.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white)),
+                                ),
+                                if (lastTime != null) Text(lastTime, style: const TextStyle(color: WevoColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
                               ],
                             ),
-                          ),
-                          const Spacer(),
-                          if (lastTime != null) Text(lastTime, style: const TextStyle(color: WevoColors.textMuted, fontSize: 12)),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              lastMsg ?? 'Ditevi qualcosa!',
+                            const SizedBox(height: 7),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(999),
+                                    color: variant.color.withOpacity(0.12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(variant.icon, size: 11, color: variant.color),
+                                      const SizedBox(width: 4),
+                                      Text(variant.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: variant.color)),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                if (isUnread)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      color: const Color(0x22FA61A6),
+                                      border: Border.all(color: const Color(0x44FA61A6)),
+                                    ),
+                                    child: const Text('Nuovo', style: TextStyle(color: Color(0xFFFFB6D4), fontSize: 10, fontWeight: FontWeight.w700)),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              lastMsg ?? 'Ditevi qualcosa.',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: WevoColors.textMuted, fontSize: 14),
+                              style: const TextStyle(color: WevoColors.textMuted, fontSize: 13.5, height: 1.25),
                             ),
-                          ),
-                          if (isUnread)
-                            Container(
-                              width: 8, height: 8,
-                              margin: const EdgeInsets.only(left: 8),
-                              decoration: const BoxDecoration(shape: BoxShape.circle, color: WevoColors.pink),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -401,7 +459,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
                     const SizedBox(width: 4),
                   ],
                   Container(
-                    width: 44, height: 44,
+                    width: 44,
+                    height: 44,
                     padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
@@ -449,7 +508,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            width: 64, height: 64,
+                            width: 64,
+                            height: 64,
                             decoration: BoxDecoration(shape: BoxShape.circle, color: WevoColors.pink.withOpacity(0.08)),
                             child: const Icon(Icons.chat, color: WevoColors.pink, size: 28),
                           ),
@@ -515,7 +575,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
                     child: Opacity(
                       opacity: _sending ? 0.7 : 1,
                       child: Container(
-                        width: 44, height: 44,
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: WevoColors.primaryGradient,
@@ -556,9 +617,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
             bottomLeft: Radius.circular(isMe ? 22 : 5),
             bottomRight: Radius.circular(isMe ? 5 : 22),
           ),
-          gradient: isMe
-              ? WevoColors.primaryGradient
-              : const LinearGradient(colors: [Color(0xFF201233), Color(0xFF2A1C40)]),
+          gradient: isMe ? WevoColors.primaryGradient : const LinearGradient(colors: [Color(0xFF201233), Color(0xFF2A1C40)]),
         ),
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -578,7 +637,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 80, height: 80,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(shape: BoxShape.circle, color: WevoColors.pink.withOpacity(0.1)),
             child: const Icon(Icons.chat_bubble_outline, color: WevoColors.pink, size: 36),
           ),
@@ -596,6 +656,26 @@ class _MatchesScreenState extends State<MatchesScreen> {
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+}
+
+class _AmbientOrb extends StatelessWidget {
+  final double size;
+  final Color color;
+  const _AmbientOrb({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: color, blurRadius: size * 0.42, spreadRadius: size * 0.04)],
+        ),
+      ),
+    );
   }
 }
 
