@@ -124,7 +124,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
         Row(
           children: [
             SizedBox(width: 400, child: _matchList()),
-            Container(width: 1, color: Colors.white.withOpacity(0.06)),
+            Container(width: 1, color: Colors.white.withValues(alpha: 0.06)),
             Expanded(child: _selected != null ? _chatThread(mobile: false) : _emptyChat()),
           ],
         ),
@@ -151,9 +151,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
                     colors: [Color(0x22FFFFFF), Color(0x10FFFFFF)],
                   ),
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: Colors.white.withOpacity(0.08)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.16), blurRadius: 26, offset: const Offset(0, 14)),
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.16), blurRadius: 26, offset: const Offset(0, 14)),
                   ],
                 ),
                 child: Column(
@@ -190,8 +190,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
                                 gradient: active
                                     ? const LinearGradient(colors: [Color(0x22FA61A6), Color(0x166DD7D7)])
                                     : null,
-                                color: active ? null : Colors.white.withOpacity(0.04),
-                                border: Border.all(color: active ? WevoColors.pink.withOpacity(0.45) : Colors.white.withOpacity(0.08)),
+                                color: active ? null : Colors.white.withValues(alpha: 0.04),
+                                border: Border.all(color: active ? WevoColors.pink.withValues(alpha: 0.45) : Colors.white.withValues(alpha: 0.08)),
                               ),
                               child: Text(f, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: active ? Colors.white : WevoColors.textMuted)),
                             ),
@@ -312,10 +312,10 @@ class _MatchesScreenState extends State<MatchesScreen> {
                   ? const LinearGradient(colors: [Color(0x22FA61A6), Color(0x126DD7D7)])
                   : const LinearGradient(colors: [Color(0x12FFFFFF), Color(0x08FFFFFF)]),
               borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: isActive ? WevoColors.pink.withOpacity(0.32) : Colors.white.withOpacity(0.06)),
+              border: Border.all(color: isActive ? WevoColors.pink.withValues(alpha: 0.32) : Colors.white.withValues(alpha: 0.06)),
               boxShadow: [
                 if (isActive) wevoGlow(WevoColors.pink, blur: 20),
-                if (!isActive) BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 18, offset: const Offset(0, 10)),
+                if (!isActive) BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 18, offset: const Offset(0, 10)),
               ],
             ),
             child: Material(
@@ -379,7 +379,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(999),
-                                    color: variant.color.withOpacity(0.12),
+                                    color: variant.color.withValues(alpha: 0.12),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -447,7 +447,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
             Container(
               padding: EdgeInsets.fromLTRB(mobile ? 16 : 22, 22, mobile ? 16 : 22, 14),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.06))),
+                border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
               ),
               child: Row(
                 children: [
@@ -510,7 +510,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                           Container(
                             width: 64,
                             height: 64,
-                            decoration: BoxDecoration(shape: BoxShape.circle, color: WevoColors.pink.withOpacity(0.08)),
+                            decoration: BoxDecoration(shape: BoxShape.circle, color: WevoColors.pink.withValues(alpha: 0.08)),
                             child: const Icon(Icons.chat, color: WevoColors.pink, size: 28),
                           ),
                           const SizedBox(height: 14),
@@ -546,7 +546,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                       decoration: BoxDecoration(
                         color: const Color(0xFF201233),
                         borderRadius: BorderRadius.circular(30),
-                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                       ),
                       child: Row(
                         children: [
@@ -580,7 +580,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: WevoColors.primaryGradient,
-                          boxShadow: [BoxShadow(color: WevoColors.hotPink.withOpacity(0.5), blurRadius: 20)],
+                          boxShadow: [BoxShadow(color: WevoColors.hotPink.withValues(alpha: 0.5), blurRadius: 20)],
                         ),
                         child: _sending
                             ? const Padding(
@@ -624,7 +624,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
           children: [
             Text((msg['text'] ?? '') as String, style: TextStyle(color: isMe ? Colors.white : const Color(0xFFE4E0EF), fontSize: 15, height: 1.4)),
             const SizedBox(height: 4),
-            Text(time, style: TextStyle(color: isMe ? Colors.white.withOpacity(0.6) : const Color(0xFF6B6178), fontSize: 11)),
+            Text(time, style: TextStyle(color: isMe ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF6B6178), fontSize: 11)),
           ],
         ),
       ),
@@ -639,7 +639,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
           Container(
             width: 80,
             height: 80,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: WevoColors.pink.withOpacity(0.1)),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: WevoColors.pink.withValues(alpha: 0.1)),
             child: const Icon(Icons.chat_bubble_outline, color: WevoColors.pink, size: 36),
           ),
           const SizedBox(height: 18),

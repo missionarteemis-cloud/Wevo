@@ -170,11 +170,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: Colors.white.withOpacity(0.09)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 28, offset: const Offset(0, 14)),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 28, offset: const Offset(0, 14)),
               ],
             ),
             child: Row(
@@ -186,8 +186,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   margin: const EdgeInsets.only(right: 10, bottom: 4),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.06),
-                    border: Border.all(color: Colors.white.withOpacity(0.06)),
+                    color: Colors.white.withValues(alpha: 0.06),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                   ),
                   child: const Icon(Icons.add, color: WevoColors.textMuted, size: 18),
                 ),
@@ -350,9 +350,9 @@ class _ChatHeader extends StatelessWidget {
                 colors: [Color(0x33FFFFFF), Color(0x12FFFFFF)],
               ),
               borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 30, offset: const Offset(0, 16)),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 30, offset: const Offset(0, 16)),
               ],
             ),
             child: Row(
@@ -431,9 +431,9 @@ class _HeaderIconButton extends StatelessWidget {
         height: 42,
         margin: const EdgeInsets.only(left: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
+          color: Colors.white.withValues(alpha: 0.06),
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withOpacity(0.06)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
           boxShadow: [wevoGlow(color, blur: 16)],
         ),
         child: Icon(icon, color: color, size: 18),
@@ -471,9 +471,9 @@ class _InfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
     );
@@ -522,8 +522,8 @@ class _ChatEmptyState extends StatelessWidget {
             colors: [Color(0x22FA61A6), Color(0x12FFFFFF)],
           ),
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 26, offset: const Offset(0, 16))],
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 26, offset: const Offset(0, 16))],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -567,18 +567,18 @@ class _TimeDivider extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
         children: [
-          Expanded(child: Divider(color: Colors.white.withOpacity(0.06), thickness: 1)),
+          Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.06), thickness: 1)),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 12),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
+              color: Colors.white.withValues(alpha: 0.04),
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: Colors.white.withOpacity(0.06)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
             ),
             child: Text(label, style: const TextStyle(color: WevoColors.textMuted, fontSize: 11, fontWeight: FontWeight.w700)),
           ),
-          Expanded(child: Divider(color: Colors.white.withOpacity(0.06), thickness: 1)),
+          Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.06), thickness: 1)),
         ],
       ),
     );
@@ -664,10 +664,10 @@ class _MessageBubble extends StatelessWidget {
                   bottomLeft: Radius.circular(isMe ? 22 : 8),
                   bottomRight: Radius.circular(isMe ? 8 : 22),
                 ),
-                border: Border.all(color: isMe ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.06)),
+                border: Border.all(color: isMe ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.06)),
                 boxShadow: [
                   if (isMe) wevoGlow(WevoColors.pink, blur: 18),
-                  if (!isMe) BoxShadow(color: Colors.black.withOpacity(0.14), blurRadius: 18, offset: const Offset(0, 10)),
+                  if (!isMe) BoxShadow(color: Colors.black.withValues(alpha: 0.14), blurRadius: 18, offset: const Offset(0, 10)),
                 ],
               ),
               child: Column(
@@ -681,14 +681,14 @@ class _MessageBubble extends StatelessWidget {
                       Text(
                         time,
                         style: TextStyle(
-                          color: isMe ? Colors.white.withOpacity(0.72) : WevoColors.textMuted,
+                          color: isMe ? Colors.white.withValues(alpha: 0.72) : WevoColors.textMuted,
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       if (isMe) ...[
                         const SizedBox(width: 6),
-                        Icon(Icons.done_all_rounded, size: 13, color: Colors.white.withOpacity(0.76)),
+                        Icon(Icons.done_all_rounded, size: 13, color: Colors.white.withValues(alpha: 0.76)),
                       ],
                     ],
                   ),
