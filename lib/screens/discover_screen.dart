@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
+import '../services/match_service.dart';
 import '../theme.dart';
 import '../main.dart';
 import '../widgets/wevo_buttons.dart';
@@ -222,20 +223,51 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   Future<void> _load() async {
-    if (mounted) setState(() { _users = [...mockUsers]; _loading = false; });
+    try {
+      final users = await MatchService.fetchDiscoverFeed().timeout(const Duration(seconds: 8));
+      if (!mounted) return;
+      setState(() {
+        _users = users;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _users = const [];
+        _loading = false;
+      });
+    }
   }
 
-  void _swipe(bool liked) {
+  Future<void> _swipe(bool liked) async {
     if (_index >= _users.length || _swiping) return;
     final user = _users[_index];
-    final isMatch = liked && user.id == 'm1';
-    if (isMatch) {
-      setState(() { _matchedUser = user; _showMatch = true; _matchCtrl.forward(from: 0); });
-      return;
-    }
     setState(() {
       _swiping = true;
       _swipeLiked = liked;
+    });
+
+    bool isMatch = false;
+    try {
+      isMatch = await MatchService.swipeUser(targetUserId: user.id, liked: liked);
+    } catch (_) {
+      isMatch = false;
+    }
+
+    if (!mounted) return;
+
+    if (isMatch) {
+      setState(() {
+        _matchedUser = user;
+        _showMatch = true;
+        _swiping = false;
+        _dragX = 0;
+      });
+      _matchCtrl.forward(from: 0);
+      return;
+    }
+
+    setState(() {
       _dragX = liked ? 400 : -400;
     });
     _swipeCtrl.forward(from: 0);
@@ -366,7 +398,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
           WevoGradientButton(
             label: 'Ricomincia',
             size: WevoSize.m,
-            onPressed: () => setState(() { _index = 0; _users = [...mockUsers]; }),
+            onPressed: () {
+              setState(() {
+                _index = 0;
+                _loading = true;
+              });
+              _load();
+            },
           ),
         ],
       ),
@@ -1217,10 +1255,3 @@ const _allInterests = {
   'FPS', 'MOBA', 'Co-op', 'Anime', 'Tech', 'Design', 'Community', 'Chill', 'Chat',
 };
 
-final List<UserModel> mockUsers = [
-  UserModel(id: 'm1', name: 'Alex', username: 'alexvibes', age: 25, bio: 'Music, gaming e serate film. Cerco una vibe pulita e qualcuno con cui ridere fino a tardi.', photoUrl: 'https://picsum.photos/seed/alex25p/200/200', coverUrl: 'https://picsum.photos/seed/m1c/600/900', interests: ['Music', 'Gaming', 'Movies'], favoriteGames: ['Fortnite', 'Minecraft', 'Party Animals'], platforms: ['PC', 'PlayStation'], lookingFor: ['Friendship', 'Community'], discordTag: 'alexvibes', country: 'Milano, IT'),
-  UserModel(id: 'm2', name: 'Giulia', username: 'giuplays', age: 24, bio: 'FPS, co-op e sessioni chill la sera. Caffè sempre, drama mai.', photoUrl: 'https://picsum.photos/seed/giulia24p/200/200', coverUrl: 'https://picsum.photos/seed/m2c/600/900', interests: ['FPS', 'Co-op', 'Coffee'], favoriteGames: ['Valorant', 'Overwatch 2'], platforms: ['PC'], lookingFor: ['Duo', 'Friendship'], discordTag: 'giuplays', country: 'Roma, IT'),
-  UserModel(id: 'm3', name: 'Marco', username: 'marcojungler', age: 27, bio: 'Main jungle, ranked ma senza tilt. Film d\'autore e vinili nel tempo libero.', photoUrl: 'https://picsum.photos/seed/marco27p/200/200', coverUrl: 'https://picsum.photos/seed/m3c/600/900', interests: ['MOBA', 'Movies', 'Music'], favoriteGames: ['League of Legends', 'TFT'], platforms: ['PC'], lookingFor: ['Ranked', 'Community'], discordTag: 'marcojungler', country: 'Torino, IT'),
-  UserModel(id: 'm4', name: 'Noemi', username: 'n0eheart', age: 23, bio: 'Late night chat, co-op e un po\' di chaos. Mi piacciono i viaggi last minute.', photoUrl: 'https://picsum.photos/seed/noemi23p/200/200', coverUrl: 'https://picsum.photos/seed/m4c/600/900', interests: ['Music', 'Chat', 'Gaming'], favoriteGames: ['Overcooked', 'The Sims 4'], platforms: ['PC', 'Mobile'], lookingFor: ['Chill', 'Duo'], discordTag: 'n0eheart', country: 'Firenze, IT'),
-  UserModel(id: 'm5', name: 'Luca', username: 'padmaster', age: 26, bio: 'Controller god, arcade lover, zero tilt. Pizza e film il venerdì sera.', photoUrl: 'https://picsum.photos/seed/luca26p/200/200', coverUrl: 'https://picsum.photos/seed/m5c/600/900', interests: ['Gaming', 'Movies', 'Coffee'], favoriteGames: ['Rocket League', 'Tekken 8'], platforms: ['PlayStation', 'PC'], lookingFor: ['Ranked', 'Duo'], discordTag: 'padmaster', country: 'Napoli, IT'),
-];

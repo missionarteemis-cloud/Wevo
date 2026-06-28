@@ -1,8 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
+import '../main.dart';
 import '../models/user_model.dart';
+import '../services/chat_service.dart';
 import '../services/match_service.dart';
 import '../theme.dart';
-import '../main.dart';
 
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key});
@@ -17,8 +20,10 @@ class _MatchesScreenState extends State<MatchesScreen> {
   UserModel? _selected;
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  List<Map<String, String>> _messages = [];
-  String _groupFilter = 'Tutte'; // Tutte | Online | Nuove
+  List<Map<String, dynamic>> _messages = const [];
+  String _groupFilter = 'Tutte';
+  String? _sendError;
+  bool _sending = false;
 
   @override
   void initState() {
@@ -28,17 +33,20 @@ class _MatchesScreenState extends State<MatchesScreen> {
 
   Future<void> _load() async {
     try {
-      final real = await MatchService.fetchMatchUsers().timeout(const Duration(seconds: 5));
-      if (mounted) setState(() {
-        _matches = real.isNotEmpty ? real : [...mockMatches];
+      final real = await MatchService.fetchMatchUsers().timeout(const Duration(seconds: 8));
+      if (!mounted) return;
+      setState(() {
+        _matches = real;
         _loading = false;
-        if (_selected == null && _matches.isNotEmpty) _selectChat(_matches[0]);
+        if (_selected == null && _matches.isNotEmpty) {
+          _selected = _matches.first;
+        }
       });
     } catch (_) {
-      if (mounted) setState(() {
-        _matches = [...mockMatches];
+      if (!mounted) return;
+      setState(() {
+        _matches = const [];
         _loading = false;
-        if (_selected == null && _matches.isNotEmpty) _selectChat(_matches[0]);
       });
     }
   }
@@ -46,18 +54,43 @@ class _MatchesScreenState extends State<MatchesScreen> {
   void _selectChat(UserModel user) {
     setState(() {
       _selected = user;
-      _messages = mockMessages[user.id] ?? [];
+      _sendError = null;
     });
   }
 
-  void _sendMsg() {
-    final t = _msgCtrl.text.trim();
-    if (t.isEmpty) return;
+  Future<void> _sendMsg() async {
+    final user = _selected;
+    final text = _msgCtrl.text.trim();
+    if (user == null || text.isEmpty || _sending) return;
+
     setState(() {
-      _messages.add({'sender': 'me', 'text': t, 'time': DateTime.now().toString().substring(11, 16)});
-      _msgCtrl.clear();
+      _sending = true;
+      _sendError = null;
     });
-    Future.delayed(const Duration(milliseconds: 600), () => _scrollCtrl.animateTo(_scrollCtrl.position.maxScrollExtent, duration: const Duration(milliseconds: 200), curve: Curves.easeOut));
+
+    final result = await ChatService.sendMessage(otherUserId: user.id, text: text);
+
+    if (!mounted) return;
+
+    if (result.ok) {
+      _msgCtrl.clear();
+      Future.delayed(const Duration(milliseconds: 120), () {
+        if (!_scrollCtrl.hasClients) return;
+        _scrollCtrl.animateTo(
+          _scrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      });
+    } else {
+      setState(() {
+        _sendError = _messageForSendError(result.error);
+      });
+    }
+
+    setState(() {
+      _sending = false;
+    });
   }
 
   @override
@@ -75,7 +108,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
     );
   }
 
-  // ── MOBILE: lista chat full con navigazione a thread ──
   Widget _mobileLayout() {
     if (_selected != null) {
       return _chatThread(mobile: true);
@@ -83,7 +115,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
     return _matchList();
   }
 
-  // ── DESKTOP: lista a sinistra + thread a destra ──
   Widget _desktopLayout() {
     return Row(
       children: [
@@ -94,12 +125,10 @@ class _MatchesScreenState extends State<MatchesScreen> {
     );
   }
 
-  // ── Lista match (sinistra) ──
   Widget _matchList() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header
         Padding(
           padding: const EdgeInsets.fromLTRB(22, 30, 22, 8),
           child: Column(
@@ -117,7 +146,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
               const SizedBox(height: 12),
               const Text('Matches', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 22, fontWeight: FontWeight.w600, color: Colors.white)),
               const SizedBox(height: 16),
-              // Filtri
               Row(
                 children: ['Tutte', 'Online', 'Nuove'].map((f) {
                   final active = _groupFilter == f;
@@ -141,24 +169,101 @@ class _MatchesScreenState extends State<MatchesScreen> {
             ],
           ),
         ),
-        // Lista
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: _matches.length,
-            itemBuilder: (_, i) => _matchTile(_matches[i]),
-          ),
+          child: _matches.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      'Nessun match reale disponibile ancora.\nFai un match vero in Discover e la chat comparirà qui.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: WevoColors.textMuted, fontSize: 14, height: 1.45),
+                    ),
+                  ),
+                )
+              : StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: ChatService.chatPreviewsStream(),
+                  builder: (context, snapshot) {
+                    final previews = _previewMap(snapshot.data ?? const []);
+                    final visibleMatches = _filteredMatches(previews);
+                    if (visibleMatches.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            _groupFilter == 'Nuove'
+                                ? 'Nessuna chat nuova al momento.'
+                                : 'Nessun match visibile con questo filtro.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: WevoColors.textMuted, fontSize: 14),
+                          ),
+                        ),
+                      );
+                    }
+
+                    if (_selected != null && !visibleMatches.any((u) => u.id == _selected!.id)) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        setState(() => _selected = visibleMatches.first);
+                      });
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: visibleMatches.length,
+                      itemBuilder: (_, i) => _matchTile(visibleMatches[i], previews[visibleMatches[i].id]),
+                    );
+                  },
+                ),
         ),
       ],
     );
   }
 
-  Widget _matchTile(UserModel user) {
+  Map<String, Map<String, dynamic>> _previewMap(List<Map<String, dynamic>> previews) {
+    final map = <String, Map<String, dynamic>>{};
+    for (final preview in previews) {
+      final users = List<String>.from(preview['users'] ?? const []);
+      final otherId = users.where((id) => id != ChatService.currentUid).cast<String?>().firstWhere((id) => id != null, orElse: () => null);
+      if (otherId != null) {
+        map[otherId] = preview;
+      }
+    }
+    return map;
+  }
+
+  List<UserModel> _filteredMatches(Map<String, Map<String, dynamic>> previews) {
+    final now = DateTime.now();
+    final sorted = [..._matches]
+      ..sort((a, b) {
+        final aTs = previews[a.id]?['lastMessageAt'];
+        final bTs = previews[b.id]?['lastMessageAt'];
+        final aDate = aTs is Timestamp ? aTs.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = bTs is Timestamp ? bTs.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+
+    return sorted.where((user) {
+      final preview = previews[user.id];
+      switch (_groupFilter) {
+        case 'Online':
+          return true;
+        case 'Nuove':
+          final ts = preview?['lastMessageAt'];
+          if (ts is! Timestamp) return false;
+          return now.difference(ts.toDate()).inHours < 24;
+        default:
+          return true;
+      }
+    }).toList();
+  }
+
+  Widget _matchTile(UserModel user, Map<String, dynamic>? preview) {
     final isActive = _selected?.id == user.id;
-    final msg = mockMessages[user.id];
-    final lastMsg = msg != null && msg.isNotEmpty ? msg.last['text'] : null;
-    final lastTime = msg != null && msg.isNotEmpty ? msg.last['time'] : null;
+    final lastMsg = preview?['lastMessage'] as String?;
+    final lastTime = _previewTime(preview?['lastMessageAt']);
     final variant = _variantFor(user);
+    final isUnread = preview != null && preview['lastSenderId'] != null && preview['lastSenderId'] != ChatService.currentUid;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -175,7 +280,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                // Avatar
                 Stack(
                   children: [
                     Container(
@@ -205,7 +309,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
                   ],
                 ),
                 const SizedBox(width: 14),
-                // Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,10 +344,10 @@ class _MatchesScreenState extends State<MatchesScreen> {
                               lastMsg ?? 'Ditevi qualcosa!',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(color: WevoColors.textMuted, fontSize: 14),
+                              style: const TextStyle(color: WevoColors.textMuted, fontSize: 14),
                             ),
                           ),
-                          if (i(int.tryParse(user.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0) % 3 == 0)
+                          if (isUnread)
                             Container(
                               width: 8, height: 8,
                               margin: const EdgeInsets.only(left: 8),
@@ -263,148 +366,183 @@ class _MatchesScreenState extends State<MatchesScreen> {
     );
   }
 
-  // ── Thread chat (destra) ──
   Widget _chatThread({required bool mobile}) {
     final u = _selected!;
-    return Column(
-      children: [
-        // Header chat
-        Container(
-          padding: EdgeInsets.fromLTRB(mobile ? 16 : 22, 22, mobile ? 16 : 22, 14),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.06))),
-          ),
-          child: Row(
-            children: [
-              if (mobile) ...[
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Color(0xFFFFB6D4), size: 22),
-                  onPressed: () => setState(() => _selected = null),
-                ),
-                const SizedBox(width: 4),
-              ],
-              // Avatar
-              Container(
-                width: 44, height: 44,
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(colors: [WevoColors.pink, Color(0xFFB98AE6)]),
-                ),
-                child: CircleAvatar(
-                  backgroundColor: const Color(0xFF1A1128),
-                  backgroundImage: u.photoUrl.isNotEmpty ? NetworkImage(u.photoUrl) : null,
-                  child: u.photoUrl.isEmpty ? Text(u.name[0].toUpperCase(), style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.w600, color: Color(0xFFFFB6D4), fontSize: 16)) : null,
-                ),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: ChatService.messagesStream(otherUserId: u.id),
+      builder: (context, snapshot) {
+        final messages = snapshot.data ?? const [];
+        if (_messages.length != messages.length) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_scrollCtrl.hasClients) return;
+            _scrollCtrl.animateTo(
+              _scrollCtrl.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+            );
+          });
+        }
+        _messages = messages;
+
+        return Column(
+          children: [
+            Container(
+              padding: EdgeInsets.fromLTRB(mobile ? 16 : 22, 22, mobile ? 16 : 22, 14),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.06))),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(u.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white)),
-                        const SizedBox(width: 6),
-                        const Icon(Icons.verified, color: Color(0xFF62E6FF), size: 16),
-                      ],
+              child: Row(
+                children: [
+                  if (mobile) ...[
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Color(0xFFFFB6D4), size: 22),
+                      onPressed: () => setState(() => _selected = null),
                     ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Container(width: 6, height: 6, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF9EDFA6), boxShadow: [BoxShadow(color: Color(0xFF9EDFA6), blurRadius: 6)])),
-                        const SizedBox(width: 4),
-                        const Text('Online', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF9EDFA6))),
-                      ],
-                    ),
+                    const SizedBox(width: 4),
                   ],
-                ),
-              ),
-              // Azioni
-              Icon(Icons.phone_outlined, color: WevoColors.textMuted, size: 20),
-              const SizedBox(width: 14),
-              Icon(Icons.more_horiz, color: WevoColors.textMuted, size: 22),
-            ],
-          ),
-        ),
-        // Messaggi
-        Expanded(
-          child: _messages.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 64, height: 64,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: WevoColors.pink.withOpacity(0.08)),
-                      child: const Icon(Icons.chat, color: WevoColors.pink, size: 28),
+                  Container(
+                    width: 44, height: 44,
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(colors: [WevoColors.pink, Color(0xFFB98AE6)]),
                     ),
-                    const SizedBox(height: 14),
-                    Text("Ditevi qualcosa per iniziare!", style: TextStyle(color: WevoColors.textMuted, fontSize: 14)),
-                  ],
-                ),
-              )
-            : ListView.builder(
-                controller: _scrollCtrl,
-                padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
-                itemCount: _messages.length,
-                itemBuilder: (_, i) => _msgBubble(_messages[i]),
-              ),
-        ),
-        // Composer
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.only(left: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF201233),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: Colors.white.withOpacity(0.08)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.add, color: WevoColors.textMuted, size: 22),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: mobile ? 200 : 360,
-                      child: TextField(
-                        controller: _msgCtrl,
-                        decoration: const InputDecoration(
-                          hintText: 'Scrivi un messaggio...',
-                          hintStyle: TextStyle(color: Color(0xFF6B6178)),
-                          border: InputBorder.none,
+                    child: CircleAvatar(
+                      backgroundColor: const Color(0xFF1A1128),
+                      backgroundImage: u.photoUrl.isNotEmpty ? NetworkImage(u.photoUrl) : null,
+                      child: u.photoUrl.isEmpty ? Text(u.name[0].toUpperCase(), style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.w600, color: Color(0xFFFFB6D4), fontSize: 16)) : null,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(u.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white)),
+                            const SizedBox(width: 6),
+                            const Icon(Icons.verified, color: Color(0xFF62E6FF), size: 16),
+                          ],
                         ),
-                        style: const TextStyle(color: Colors.white, fontSize: 15),
-                        onSubmitted: (_) => _sendMsg(),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(width: 6, height: 6, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF9EDFA6), boxShadow: [BoxShadow(color: Color(0xFF9EDFA6), blurRadius: 6)])),
+                            const SizedBox(width: 4),
+                            const Text('Online', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF9EDFA6))),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.phone_outlined, color: WevoColors.textMuted, size: 20),
+                  const SizedBox(width: 14),
+                  Icon(Icons.more_horiz, color: WevoColors.textMuted, size: 22),
+                ],
+              ),
+            ),
+            Expanded(
+              child: messages.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 64, height: 64,
+                            decoration: BoxDecoration(shape: BoxShape.circle, color: WevoColors.pink.withOpacity(0.08)),
+                            child: const Icon(Icons.chat, color: WevoColors.pink, size: 28),
+                          ),
+                          const SizedBox(height: 14),
+                          Text('Ditevi qualcosa per iniziare!', style: TextStyle(color: WevoColors.textMuted, fontSize: 14)),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollCtrl,
+                      padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
+                      itemCount: messages.length,
+                      itemBuilder: (_, i) => _msgBubble(messages[i]),
+                    ),
+            ),
+            if (_sendError != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _sendError!,
+                    style: const TextStyle(color: Color(0xFFFF8AA8), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.only(left: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF201233),
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.add, color: WevoColors.textMuted, size: 22),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _msgCtrl,
+                              decoration: InputDecoration(
+                                hintText: _sending ? 'Invio in corso...' : 'Scrivi un messaggio...',
+                                hintStyle: const TextStyle(color: Color(0xFF6B6178)),
+                                border: InputBorder.none,
+                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 15),
+                              onSubmitted: (_) => _sendMsg(),
+                              enabled: !_sending,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              GestureDetector(
-                onTap: _sendMsg,
-                child: Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: WevoColors.primaryGradient,
-                    boxShadow: [BoxShadow(color: WevoColors.hotPink.withOpacity(0.5), blurRadius: 20)],
                   ),
-                  child: const Icon(Icons.send, color: Colors.white, size: 18),
-                ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: _sending ? null : _sendMsg,
+                    child: Opacity(
+                      opacity: _sending ? 0.7 : 1,
+                      child: Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: WevoColors.primaryGradient,
+                          boxShadow: [BoxShadow(color: WevoColors.hotPink.withOpacity(0.5), blurRadius: 20)],
+                        ),
+                        child: _sending
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.send, color: Colors.white, size: 18),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _msgBubble(Map<String, String> msg) {
-    final isMe = msg['sender'] == 'me';
+  Widget _msgBubble(Map<String, dynamic> msg) {
+    final isMe = msg['senderId'] == ChatService.currentUid;
+    final createdAt = msg['createdAt'];
+    final time = createdAt is Timestamp ? _formatTime(createdAt.toDate()) : 'Ora';
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -419,15 +557,15 @@ class _MatchesScreenState extends State<MatchesScreen> {
             bottomRight: Radius.circular(isMe ? 5 : 22),
           ),
           gradient: isMe
-            ? WevoColors.primaryGradient
-            : LinearGradient(colors: [const Color(0xFF201233), const Color(0xFF2A1C40)]),
+              ? WevoColors.primaryGradient
+              : const LinearGradient(colors: [Color(0xFF201233), Color(0xFF2A1C40)]),
         ),
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Text(msg['text'] ?? '', style: TextStyle(color: isMe ? Colors.white : const Color(0xFFE4E0EF), fontSize: 15, height: 1.4)),
+            Text((msg['text'] ?? '') as String, style: TextStyle(color: isMe ? Colors.white : const Color(0xFFE4E0EF), fontSize: 15, height: 1.4)),
             const SizedBox(height: 4),
-            Text(msg['time'] ?? '', style: TextStyle(color: isMe ? Colors.white.withOpacity(0.6) : const Color(0xFF6B6178), fontSize: 11)),
+            Text(time, style: TextStyle(color: isMe ? Colors.white.withOpacity(0.6) : const Color(0xFF6B6178), fontSize: 11)),
           ],
         ),
       ),
@@ -461,10 +599,37 @@ class _MatchesScreenState extends State<MatchesScreen> {
   }
 }
 
-// Helper
-int i(int? v) => v ?? 0;
+String? _previewTime(dynamic value) {
+  if (value is! Timestamp) return null;
+  final dt = value.toDate();
+  final now = DateTime.now();
+  if (now.year == dt.year && now.month == dt.month && now.day == dt.day) {
+    return _formatTime(dt);
+  }
+  return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
+}
 
-// Variant per match tile
+String _formatTime(DateTime dt) {
+  final h = dt.hour.toString().padLeft(2, '0');
+  final m = dt.minute.toString().padLeft(2, '0');
+  return '$h:$m';
+}
+
+String _messageForSendError(String? code) {
+  switch (code) {
+    case 'not-matched':
+      return 'Puoi scrivere solo a utenti con cui hai un match reale.';
+    case 'recipient-not-found':
+      return 'Utente non disponibile.';
+    case 'permission-denied':
+      return 'Permesso negato dal backend.';
+    case 'unavailable':
+      return 'Backend non raggiungibile, riprova tra poco.';
+    default:
+      return 'Invio non riuscito. Riprova.';
+  }
+}
+
 class _MatchVariant {
   final IconData icon;
   final Color color;
@@ -481,33 +646,3 @@ _MatchVariant _variantFor(UserModel user) {
   if (haystack.contains('gaming') || haystack.contains('fps') || haystack.contains('moba')) return const _MatchVariant(icon: Icons.sports_esports_outlined, color: Color(0xFFFF5FA2), label: 'Gaming');
   return const _MatchVariant(icon: Icons.wb_sunny_outlined, color: Color(0xFFFFC76A), label: 'Chill');
 }
-
-// Mock data
-final List<UserModel> mockMatches = [
-  UserModel(id: 'm1', name: 'Giulia', username: 'giuplays', age: 24, bio: 'FPS, co-op e sessioni chill.', photoUrl: 'https://picsum.photos/seed/giulia24p/200/200', coverUrl: 'https://picsum.photos/seed/giulia24c/600/900', interests: ['FPS', 'Co-op'], favoriteGames: ['Valorant'], platforms: ['PC'], lookingFor: ['Duo'], discordTag: 'giuplays', country: 'Roma, IT'),
-  UserModel(id: 'm2', name: 'Marco', username: 'marcojungler', age: 27, bio: 'Main jungle, ranked senza drama.', photoUrl: 'https://picsum.photos/seed/marco27p/200/200', coverUrl: 'https://picsum.photos/seed/marco27c/600/900', interests: ['MOBA'], favoriteGames: ['LoL'], platforms: ['PC'], lookingFor: ['Ranked'], discordTag: 'marcojungler', country: 'Torino, IT'),
-  UserModel(id: 'm4', name: 'Alex', username: 'alexvibes', age: 25, bio: 'Cerco duo, match e vibe pulita.', photoUrl: 'https://picsum.photos/seed/alex25p/200/200', coverUrl: 'https://picsum.photos/seed/alex25c/600/900', interests: ['Music', 'Gaming'], favoriteGames: ['Fortnite'], platforms: ['PC', 'PlayStation'], lookingFor: ['Friendship'], discordTag: 'alexvibes', country: 'Milano, IT'),
-  UserModel(id: 'm5', name: 'Noemi', username: 'n0eheart', age: 23, bio: 'Late night chat e co-op.', photoUrl: 'https://picsum.photos/seed/noemi23p/200/200', coverUrl: 'https://picsum.photos/seed/noemi23c/600/900', interests: ['Chat', 'Music'], favoriteGames: ['Overcooked'], platforms: ['PC', 'Mobile'], lookingFor: ['Chill'], discordTag: 'n0eheart', country: 'Firenze, IT'),
-];
-
-final Map<String, List<Map<String, String>>> mockMessages = {
-  'm1': [
-    {'sender': 'them', 'text': 'Ti va una duo stasera?', 'time': '10:30'},
-    {'sender': 'me', 'text': 'Sì, dopo le 21 ci sono', 'time': '10:32'},
-    {'sender': 'them', 'text': 'Perfetto! Ti mando invito', 'time': '10:33'},
-  ],
-  'm2': [
-    {'sender': 'them', 'text': 'Ranked o chill?', 'time': 'Ieri'},
-    {'sender': 'me', 'text': 'Una ranked e poi chill', 'time': 'Ieri'},
-    {'sender': 'them', 'text': 'Let\'s go 🔥', 'time': 'Ieri'},
-  ],
-  'm4': [
-    {'sender': 'them', 'text': 'Stessa vibe, stesso caos', 'time': '18:20'},
-    {'sender': 'me', 'text': 'Ahah esatto, ci beccamo?', 'time': '18:22'},
-    {'sender': 'them', 'text': 'Certamente! 🚀', 'time': '18:23'},
-  ],
-  'm5': [
-    {'sender': 'them', 'text': 'Facciamo un game e poi chat?', 'time': '17:02'},
-    {'sender': 'me', 'text': 'Let\'s go, quale giochiamo?', 'time': '17:04'},
-  ],
-};

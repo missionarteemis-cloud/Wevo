@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ChatService {
   static final _db = FirebaseFirestore.instance;
   static final _auth = FirebaseAuth.instance;
+  static final _fn = FirebaseFunctions.instanceFor(region: 'us-central1');
 
   static String get currentUid => _auth.currentUser!.uid;
   static String get _uid => _auth.currentUser!.uid;
@@ -11,22 +13,6 @@ class ChatService {
   static String chatIdFor(String otherUserId) {
     final sorted = [_uid, otherUserId]..sort();
     return '${sorted[0]}_${sorted[1]}';
-  }
-
-  static Future<void> ensureChat({required String otherUserId}) async {
-    final chatId = chatIdFor(otherUserId);
-    final chatRef = _db.collection('chats').doc(chatId);
-    final snap = await chatRef.get();
-    if (snap.exists) return;
-
-    await chatRef.set({
-      'users': [_uid, otherUserId],
-      'matchId': chatId,
-      'createdAt': FieldValue.serverTimestamp(),
-      'lastMessage': null,
-      'lastMessageAt': null,
-      'lastSenderId': null,
-    });
   }
 
   static Stream<List<Map<String, dynamic>>> messagesStream({required String otherUserId}) {
@@ -47,34 +33,40 @@ class ChatService {
         );
   }
 
-  static Future<void> sendMessage({
+  static Stream<List<Map<String, dynamic>>> chatPreviewsStream() {
+    return _db
+        .collection('chats')
+        .where('users', arrayContains: _uid)
+        .orderBy('lastMessageAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => {
+                    'id': d.id,
+                    ...d.data(),
+                  })
+              .toList(),
+        );
+  }
+
+  static Future<({bool ok, String? error})> sendMessage({
     required String otherUserId,
     required String text,
   }) async {
-    final chatId = chatIdFor(otherUserId);
-    final chatRef = _db.collection('chats').doc(chatId);
-    final msgRef = chatRef.collection('messages').doc();
-
-    await ensureChat(otherUserId: otherUserId);
-
-    await _db.runTransaction((tx) async {
-      tx.set(msgRef, {
-        'senderId': _uid,
+    final callable = _fn.httpsCallable('sendChatMessage');
+    try {
+      final res = await callable.call(<String, dynamic>{
+        'otherUserId': otherUserId,
         'text': text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
       });
-      tx.set(
-        chatRef,
-        {
-          'users': [_uid, otherUserId],
-          'matchId': chatId,
-          'lastMessage': text.trim(),
-          'lastMessageAt': FieldValue.serverTimestamp(),
-          'lastSenderId': _uid,
-        },
-        SetOptions(merge: true),
+      final data = Map<String, dynamic>.from(res.data as Map);
+      return (
+        ok: data['ok'] == true,
+        error: data['error'] as String?,
       );
-    });
+    } on FirebaseFunctionsException catch (e) {
+      return (ok: false, error: e.code);
+    }
   }
 
   static Future<Map<String, dynamic>?> fetchChatPreview({required String otherUserId}) async {

@@ -1,15 +1,16 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { beforeUserCreated } from 'firebase-functions/v2/identity';
 import { initializeApp } from 'firebase-admin/app';
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
 
 initializeApp();
 
 const db = getFirestore();
 const STARTER_COINS = 500;
-const FUNCTION_REGION = 'us-central1';
+const AUTH_REGION = 'us-east1';
+const CALLABLE_REGION = 'us-central1';
 
-export const grantStarterCoins = beforeUserCreated({ region: FUNCTION_REGION }, async (event) => {
+export const grantStarterCoins = beforeUserCreated({ region: AUTH_REGION }, async (event) => {
   const user = event.data;
   if (!user?.uid) return;
 
@@ -25,7 +26,7 @@ export const grantStarterCoins = beforeUserCreated({ region: FUNCTION_REGION }, 
   );
 });
 
-export const buyItem = onCall({ region: FUNCTION_REGION }, async (request) => {
+export const buyItem = onCall({ region: CALLABLE_REGION }, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError('unauthenticated', 'Authentication required.');
   }
@@ -83,7 +84,7 @@ export const buyItem = onCall({ region: FUNCTION_REGION }, async (request) => {
   }
 });
 
-export const placeItem = onCall({ region: FUNCTION_REGION }, async (request) => {
+export const placeItem = onCall({ region: CALLABLE_REGION }, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError('unauthenticated', 'Authentication required.');
   }
@@ -144,7 +145,7 @@ export const placeItem = onCall({ region: FUNCTION_REGION }, async (request) => 
   }
 });
 
-export const takeItem = onCall({ region: FUNCTION_REGION }, async (request) => {
+export const takeItem = onCall({ region: CALLABLE_REGION }, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError('unauthenticated', 'Authentication required.');
   }
@@ -198,5 +199,141 @@ export const takeItem = onCall({ region: FUNCTION_REGION }, async (request) => {
   } catch (error) {
     console.error('takeItem failed', error);
     throw new HttpsError('internal', 'takeItem failed');
+  }
+});
+
+export const sendChatMessage = onCall({ region: CALLABLE_REGION }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'Authentication required.');
+  }
+
+  const text = typeof request.data?.text === 'string' ? request.data.text.trim() : '';
+  const otherUserId = typeof request.data?.otherUserId === 'string' ? request.data.otherUserId.trim() : '';
+
+  if (!otherUserId) {
+    throw new HttpsError('invalid-argument', 'otherUserId is required.');
+  }
+
+  if (!text) {
+    throw new HttpsError('invalid-argument', 'text is required.');
+  }
+
+  if (text.length > 1000) {
+    throw new HttpsError('invalid-argument', 'text too long.');
+  }
+
+  const uid = request.auth.uid;
+  if (uid === otherUserId) {
+    throw new HttpsError('invalid-argument', 'Cannot message yourself.');
+  }
+
+  const users = [uid, otherUserId].sort();
+  const chatId = `${users[0]}_${users[1]}`;
+  const chatRef = db.collection('chats').doc(chatId);
+  const matchRef = db.collection('matches').doc(chatId);
+  const messageRef = chatRef.collection('messages').doc();
+  const senderRef = db.collection('users').doc(uid);
+  const otherRef = db.collection('users').doc(otherUserId);
+
+  try {
+    const result = await db.runTransaction(async (tx) => {
+      const [senderSnap, otherSnap, matchSnap, chatSnap] = await Promise.all([
+        tx.get(senderRef),
+        tx.get(otherRef),
+        tx.get(matchRef),
+        tx.get(chatRef),
+      ]);
+
+      if (!senderSnap.exists) {
+        return { ok: false, error: 'sender-not-found' };
+      }
+      if (!otherSnap.exists) {
+        return { ok: false, error: 'recipient-not-found' };
+      }
+
+      const senderMatches = Array.isArray(senderSnap.data()?.matches) ? senderSnap.data().matches : [];
+      const otherMatches = Array.isArray(otherSnap.data()?.matches) ? otherSnap.data().matches : [];
+      const matched = senderMatches.includes(otherUserId) || otherMatches.includes(uid) || matchSnap.exists;
+      if (!matched) {
+        return { ok: false, error: 'not-matched' };
+      }
+
+      tx.set(
+        chatRef,
+        {
+          users,
+          matchId: chatId,
+          createdAt: chatSnap.exists ? chatSnap.data()?.createdAt ?? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
+          lastMessage: text,
+          lastMessageAt: FieldValue.serverTimestamp(),
+          lastSenderId: uid,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      tx.set(messageRef, {
+        senderId: uid,
+        text,
+        createdAt: FieldValue.serverTimestamp(),
+        type: 'text',
+      });
+
+      tx.set(
+        matchRef,
+        {
+          users,
+          createdAt: matchSnap.exists ? matchSnap.data()?.createdAt ?? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
+          lastMessage: text,
+          lastMessageAt: FieldValue.serverTimestamp(),
+          lastSenderId: uid,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      return { ok: true, chatId, messageId: messageRef.id };
+    });
+
+    if (!result.ok) {
+      return result;
+    }
+
+    if (otherUserId.startsWith('m')) {
+      const replyText = 'OK';
+      const replyAt = Timestamp.fromDate(new Date(Date.now() + 1500));
+      await chatRef.collection('messages').add({
+        senderId: otherUserId,
+        text: replyText,
+        createdAt: replyAt,
+        type: 'text',
+        automated: true,
+      });
+      await Promise.all([
+        chatRef.set(
+          {
+            lastMessage: replyText,
+            lastMessageAt: replyAt,
+            lastSenderId: otherUserId,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        ),
+        matchRef.set(
+          {
+            lastMessage: replyText,
+            lastMessageAt: replyAt,
+            lastSenderId: otherUserId,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        ),
+      ]);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('sendChatMessage failed', error);
+    throw new HttpsError('internal', 'sendChatMessage failed');
   }
 });

@@ -16,25 +16,39 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    ChatService.ensureChat(otherUserId: widget.user.id);
-  }
+  bool _sending = false;
+  String? _sendError;
 
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    await ChatService.sendMessage(otherUserId: widget.user.id, text: text);
-    _controller.clear();
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (!_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+    if (text.isEmpty || _sending) return;
+
+    setState(() {
+      _sending = true;
+      _sendError = null;
+    });
+
+    final result = await ChatService.sendMessage(otherUserId: widget.user.id, text: text);
+    if (!mounted) return;
+
+    if (result.ok) {
+      _controller.clear();
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (!_scrollController.hasClients) return;
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      });
+    } else {
+      setState(() {
+        _sendError = _messageForSendError(result.error);
+      });
+    }
+
+    setState(() {
+      _sending = false;
     });
   }
 
@@ -117,6 +131,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   },
                 ),
               ),
+              if (_sendError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _sendError!,
+                      style: const TextStyle(color: Color(0xFFFF8AA8), fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
               _buildInputBar(),
             ],
           ),
@@ -145,27 +170,36 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   child: TextField(
                     controller: _controller,
                     style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      hintText: 'Scrivi un messaggio...',
+                    decoration: InputDecoration(
+                      hintText: _sending ? 'Invio in corso...' : 'Scrivi un messaggio...',
                       hintStyle: TextStyle(color: WevoColors.textMuted),
                       border: InputBorder.none,
                       isDense: true,
                     ),
                     onSubmitted: (_) => _sendMessage(),
+                    enabled: !_sending,
                   ),
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: _sendMessage,
-                  child: Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      gradient: WevoColors.primaryGradient,
-                      shape: BoxShape.circle,
-                      boxShadow: [wevoGlow(WevoColors.pink, blur: 18)],
+                  onTap: _sending ? null : _sendMessage,
+                  child: Opacity(
+                    opacity: _sending ? 0.7 : 1,
+                    child: Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        gradient: WevoColors.primaryGradient,
+                        shape: BoxShape.circle,
+                        boxShadow: [wevoGlow(WevoColors.pink, blur: 18)],
+                      ),
+                      child: _sending
+                          ? const Padding(
+                              padding: EdgeInsets.all(13),
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
                     ),
-                    child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
                   ),
                 ),
               ],
@@ -205,6 +239,21 @@ String _formatTime(DateTime dt) {
   final h = dt.hour.toString().padLeft(2, '0');
   final m = dt.minute.toString().padLeft(2, '0');
   return '$h:$m';
+}
+
+String _messageForSendError(String? code) {
+  switch (code) {
+    case 'not-matched':
+      return 'Puoi scrivere solo a utenti con cui hai un match reale.';
+    case 'recipient-not-found':
+      return 'Utente non disponibile.';
+    case 'permission-denied':
+      return 'Permesso negato dal backend.';
+    case 'unavailable':
+      return 'Backend non raggiungibile, riprova tra poco.';
+    default:
+      return 'Invio non riuscito. Riprova.';
+  }
 }
 
 class _ChatHeader extends StatelessWidget {
