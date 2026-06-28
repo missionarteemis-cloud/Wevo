@@ -62,89 +62,94 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [WevoColors.bg, WevoColors.dark, WevoColors.darkSoft],
+            colors: [Color(0xFF0E0718), Color(0xFF12091F), Color(0xFF1A102B)],
+            stops: [0, .45, 1],
           ),
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _ChatHeader(user: widget.user, onDiscord: _showDiscordDialog, onRiot: _showRiotDialog),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: chips.map((c) => _InfoChip(label: c)).toList(),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: ChatService.messagesStream(otherUserId: widget.user.id),
-                  builder: (context, snapshot) {
-                    final messages = snapshot.data ?? const [];
-                    if (snapshot.connectionState == ConnectionState.waiting && messages.isEmpty) {
-                      return const Center(child: CircularProgressIndicator(color: WevoColors.pink));
-                    }
-                    if (messages.isEmpty) {
-                      return Center(
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 24),
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: WevoColors.darkSoft,
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(color: Colors.white.withOpacity(0.08)),
-                          ),
-                          child: Text(
-                            'Di\' ciao a ${widget.user.name}.\nLa vostra chat inizia qui ✨',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white70, fontSize: 16, height: 1.4),
-                          ),
-                        ),
-                      );
-                    }
-                    return ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final msg = messages[index];
-                        final isMe = msg['senderId'] == ChatService.currentUid;
-                        final createdAt = msg['createdAt'];
-                        final time = createdAt is Timestamp
-                            ? _formatTime(createdAt.toDate())
-                            : 'Ora';
-                        return _MessageBubble(
-                          text: (msg['text'] ?? '') as String,
-                          time: time,
-                          isMe: isMe,
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              if (_sendError != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      _sendError!,
-                      style: const TextStyle(color: Color(0xFFFF8AA8), fontSize: 12, fontWeight: FontWeight.w600),
+        child: Stack(
+          children: [
+            const Positioned(top: -90, right: -40, child: _AmbientOrb(size: 220, color: Color(0x22FA61A6))),
+            const Positioned(top: 120, left: -70, child: _AmbientOrb(size: 180, color: Color(0x16A4A8F3))),
+            const Positioned(bottom: 70, right: -60, child: _AmbientOrb(size: 200, color: Color(0x126DD7D7))),
+            SafeArea(
+              child: Column(
+                children: [
+                  _ChatHeader(user: widget.user, onDiscord: _showDiscordDialog, onRiot: _showRiotDialog),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ...chips.map((c) => _InfoChip(label: c)),
+                          _SignalChip(label: 'Online now'),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              _buildInputBar(),
-            ],
-          ),
+                  Expanded(
+                    child: StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: ChatService.messagesStream(otherUserId: widget.user.id),
+                      builder: (context, snapshot) {
+                        final messages = snapshot.data ?? const [];
+                        if (snapshot.connectionState == ConnectionState.waiting && messages.isEmpty) {
+                          return const Center(child: CircularProgressIndicator(color: WevoColors.pink));
+                        }
+                        if (messages.isEmpty) {
+                          return _ChatEmptyState(name: widget.user.name);
+                        }
+
+                        return ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 22),
+                          itemCount: messages.length,
+                          itemBuilder: (context, index) {
+                            final msg = messages[index];
+                            final isMe = msg['senderId'] == ChatService.currentUid;
+                            final createdAt = msg['createdAt'];
+                            final time = createdAt is Timestamp ? _formatTime(createdAt.toDate()) : 'Ora';
+                            final prev = index > 0 ? messages[index - 1] : null;
+                            final showDayLabel = _shouldShowDayLabel(prev?['createdAt'], createdAt);
+                            final dayLabel = createdAt is Timestamp ? _formatDayLabel(createdAt.toDate()) : null;
+
+                            return Column(
+                              children: [
+                                if (showDayLabel && dayLabel != null) _TimeDivider(label: dayLabel),
+                                _MessageBubble(
+                                  text: (msg['text'] ?? '') as String,
+                                  time: time,
+                                  isMe: isMe,
+                                  isAutomated: msg['automated'] == true,
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  if (_sendError != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _sendError!,
+                          style: const TextStyle(color: Color(0xFFFF8AA8), fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  _buildInputBar(),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -154,25 +159,47 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 18),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(30),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              gradient: const LinearGradient(
+                colors: [Color(0x66FFFFFF), Color(0x22FFFFFF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: Colors.white.withOpacity(0.09)),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 28, offset: const Offset(0, 14)),
+              ],
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  margin: const EdgeInsets.only(right: 10, bottom: 4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.06),
+                    border: Border.all(color: Colors.white.withOpacity(0.06)),
+                  ),
+                  child: const Icon(Icons.add, color: WevoColors.textMuted, size: 18),
+                ),
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    style: const TextStyle(color: Colors.white),
+                    minLines: 1,
+                    maxLines: 4,
+                    style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35),
                     decoration: InputDecoration(
-                      hintText: _sending ? 'Invio in corso...' : 'Scrivi un messaggio...',
-                      hintStyle: TextStyle(color: WevoColors.textMuted),
+                      hintText: _sending ? 'Invio in corso...' : 'Scrivi qualcosa di bello...',
+                      hintStyle: const TextStyle(color: WevoColors.textMuted),
                       border: InputBorder.none,
                       isDense: true,
                     ),
@@ -184,21 +211,25 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 GestureDetector(
                   onTap: _sending ? null : _sendMessage,
                   child: Opacity(
-                    opacity: _sending ? 0.7 : 1,
+                    opacity: _sending ? 0.72 : 1,
                     child: Container(
-                      width: 46,
-                      height: 46,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
-                        gradient: WevoColors.primaryGradient,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFFA61A6), Color(0xFFA4A8F3), Color(0xFF6DD7D7)],
+                        ),
                         shape: BoxShape.circle,
-                        boxShadow: [wevoGlow(WevoColors.pink, blur: 18)],
+                        boxShadow: [wevoGlow(WevoColors.pink, blur: 22)],
                       ),
                       child: _sending
                           ? const Padding(
-                              padding: EdgeInsets.all(13),
+                              padding: EdgeInsets.all(14),
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
-                          : const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
+                          : const Icon(Icons.north_rounded, color: Colors.white, size: 20),
                     ),
                   ),
                 ),
@@ -241,6 +272,24 @@ String _formatTime(DateTime dt) {
   return '$h:$m';
 }
 
+String _formatDayLabel(DateTime dt) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(dt.year, dt.month, dt.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) return 'Oggi';
+  if (diff == 1) return 'Ieri';
+  return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
+}
+
+bool _shouldShowDayLabel(dynamic previous, dynamic current) {
+  if (current is! Timestamp) return false;
+  if (previous is! Timestamp) return true;
+  final a = previous.toDate();
+  final b = current.toDate();
+  return a.year != b.year || a.month != b.month || a.day != b.day;
+}
+
 String _messageForSendError(String? code) {
   switch (code) {
     case 'not-matched':
@@ -256,6 +305,26 @@ String _messageForSendError(String? code) {
   }
 }
 
+class _AmbientOrb extends StatelessWidget {
+  final double size;
+  final Color color;
+  const _AmbientOrb({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: color, blurRadius: size * 0.42, spreadRadius: size * 0.04)],
+        ),
+      ),
+    );
+  }
+}
+
 class _ChatHeader extends StatelessWidget {
   final UserModel user;
   final VoidCallback onDiscord;
@@ -265,45 +334,83 @@ class _ChatHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = user.favoriteGames.isNotEmpty ? user.favoriteGames.first : 'Qui e ora';
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: WevoColors.darkSoft,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
-          boxShadow: [wevoGlow(WevoColors.pink, blur: 20)],
-        ),
-        child: Row(
-          children: [
-            IconButton(
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-            ),
-            _GlowAvatar(url: user.imageUrl),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(user.name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text('@${user.username}', style: const TextStyle(color: WevoColors.pink, fontSize: 12, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(
-                    user.favoriteGames.isNotEmpty ? user.favoriteGames.first : 'Online',
-                    style: const TextStyle(color: WevoColors.textMuted, fontSize: 12),
-                  ),
-                ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0x33FFFFFF), Color(0x12FFFFFF)],
               ),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 30, offset: const Offset(0, 16)),
+              ],
             ),
-            if (user.discordTag != null)
-              _HeaderIconButton(icon: Icons.games, color: WevoColors.lightBlue, onTap: onDiscord),
-            if (user.riotId != null)
-              _HeaderIconButton(icon: Icons.sports_esports, color: WevoColors.pink, onTap: onRiot),
-          ],
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+                ),
+                _GlowAvatar(url: user.imageUrl),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(user.name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                          ),
+                          const SizedBox(width: 8),
+                          const _PresenceDot(),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text('@${user.username}', style: const TextStyle(color: WevoColors.pink, fontSize: 12, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Attivo ora • $subtitle',
+                        style: const TextStyle(color: WevoColors.textMuted, fontSize: 12, height: 1.2),
+                      ),
+                    ],
+                  ),
+                ),
+                if (user.discordTag != null)
+                  _HeaderIconButton(icon: Icons.games, color: WevoColors.lightBlue, onTap: onDiscord),
+                if (user.riotId != null)
+                  _HeaderIconButton(icon: Icons.sports_esports, color: WevoColors.pink, onTap: onRiot),
+              ],
+            ),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _PresenceDot extends StatelessWidget {
+  const _PresenceDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFF9EDFA6),
+        boxShadow: [BoxShadow(color: Color(0x889EDFA6), blurRadius: 10, spreadRadius: 1)],
       ),
     );
   }
@@ -320,12 +427,13 @@ class _HeaderIconButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 40,
-        height: 40,
+        width: 42,
+        height: 42,
         margin: const EdgeInsets.only(left: 8),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.06),
           shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withOpacity(0.06)),
           boxShadow: [wevoGlow(color, blur: 16)],
         ),
         child: Icon(icon, color: color, size: 18),
@@ -341,14 +449,15 @@ class _GlowAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 54,
-      height: 54,
+      width: 58,
+      height: 58,
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: WevoColors.pink, width: 2),
-        boxShadow: [wevoGlow(WevoColors.pink, blur: 18)],
+        gradient: const LinearGradient(colors: [WevoColors.pink, WevoColors.periwinkle, WevoColors.teal]),
+        boxShadow: [wevoGlow(WevoColors.pink, blur: 20)],
       ),
-      child: CircleAvatar(radius: 24, backgroundImage: NetworkImage(url)),
+      child: CircleAvatar(radius: 25, backgroundImage: NetworkImage(url)),
     );
   }
 }
@@ -362,11 +471,116 @@ class _InfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
-      child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+      child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+class _SignalChip extends StatelessWidget {
+  final String label;
+  const _SignalChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0x22FA61A6), Color(0x126DD7D7)]),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0x33FFFFFF)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _PresenceDot(),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatEmptyState extends StatelessWidget {
+  final String name;
+  const _ChatEmptyState({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0x22FA61A6), Color(0x12FFFFFF)],
+          ),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 26, offset: const Offset(0, 16))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(colors: [WevoColors.pink, WevoColors.periwinkle]),
+                boxShadow: [wevoGlow(WevoColors.pink, blur: 18)],
+              ),
+              child: const Icon(Icons.forum_rounded, color: Colors.white, size: 26),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Apri bene la conversazione con $name',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Niente placeholder mosci. Qui parte una chat vera, con un primo messaggio che conta.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: WevoColors.textMuted, fontSize: 14, height: 1.45),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TimeDivider extends StatelessWidget {
+  final String label;
+  const _TimeDivider({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: Colors.white.withOpacity(0.06), thickness: 1)),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withOpacity(0.06)),
+            ),
+            child: Text(label, style: const TextStyle(color: WevoColors.textMuted, fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+          Expanded(child: Divider(color: Colors.white.withOpacity(0.06), thickness: 1)),
+        ],
+      ),
     );
   }
 }
@@ -402,41 +616,83 @@ class _MessageBubble extends StatelessWidget {
   final String text;
   final String time;
   final bool isMe;
+  final bool isAutomated;
 
-  const _MessageBubble({required this.text, required this.time, required this.isMe});
+  const _MessageBubble({required this.text, required this.time, required this.isMe, required this.isAutomated});
 
   @override
   Widget build(BuildContext context) {
+    final maxWidth = MediaQuery.of(context).size.width * 0.74;
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
-        decoration: BoxDecoration(
-          gradient: isMe ? WevoColors.primaryGradient : null,
-          color: isMe ? null : WevoColors.darkSoft,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(20),
-            topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(isMe ? 20 : 6),
-            bottomRight: Radius.circular(isMe ? 6 : 20),
-          ),
-          border: Border.all(color: isMe ? Colors.transparent : Colors.white.withOpacity(0.08)),
-          boxShadow: [
-            if (isMe) wevoGlow(WevoColors.pink, blur: 16),
-          ],
-        ),
+        constraints: BoxConstraints(maxWidth: maxWidth),
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Text(text, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.35)),
-            const SizedBox(height: 4),
-            Text(
-              time,
-              style: TextStyle(
-                color: isMe ? Colors.white70 : WevoColors.textMuted,
-                fontSize: 10,
+            if (isAutomated)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0x149EDFA6),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0x339EDFA6)),
+                  ),
+                  child: const Text('Auto reply', style: TextStyle(color: Color(0xFF9EDFA6), fontSize: 10, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              decoration: BoxDecoration(
+                gradient: isMe
+                    ? const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFFFA61A6), Color(0xFFA4A8F3), Color(0xFF6DD7D7)],
+                      )
+                    : const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF221638), Color(0xFF1B132D)],
+                      ),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(22),
+                  topRight: const Radius.circular(22),
+                  bottomLeft: Radius.circular(isMe ? 22 : 8),
+                  bottomRight: Radius.circular(isMe ? 8 : 22),
+                ),
+                border: Border.all(color: isMe ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.06)),
+                boxShadow: [
+                  if (isMe) wevoGlow(WevoColors.pink, blur: 18),
+                  if (!isMe) BoxShadow(color: Colors.black.withOpacity(0.14), blurRadius: 18, offset: const Offset(0, 10)),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  Text(text, style: const TextStyle(color: Colors.white, fontSize: 14.5, height: 1.38)),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        time,
+                        style: TextStyle(
+                          color: isMe ? Colors.white.withOpacity(0.72) : WevoColors.textMuted,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (isMe) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.done_all_rounded, size: 13, color: Colors.white.withOpacity(0.76)),
+                      ],
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
