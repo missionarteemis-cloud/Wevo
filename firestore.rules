@@ -69,6 +69,15 @@ service cloud.firestore {
         allow read: if isChatParticipant(chatId);
         allow create, update, delete: if false;
       }
+
+      match /reads/{readerUid} {
+        allow read: if isChatParticipant(chatId);
+        allow create, update: if isChatParticipant(chatId)
+          && request.auth.uid == readerUid
+          && request.resource.data.uid == readerUid
+          && request.resource.data.lastReadAt is timestamp;
+        allow delete: if false;
+      }
     }
   }
 }

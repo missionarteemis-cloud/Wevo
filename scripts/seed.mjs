@@ -1,6 +1,6 @@
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   console.error('❌ Missing GOOGLE_APPLICATION_CREDENTIALS');
@@ -29,21 +29,17 @@ const demoAccount = {
   lookingFor: ['Friendship', 'Community', 'Chill'],
   country: 'Italia',
   timezone: 'CET',
+  isMock: false,
 };
 
-const demoUsers = [
+const matchedMocks = [
   {
     uid: 'm1',
     email: 'giulia@wevo.app', password: 'wevo1234', username: 'giuplays', name: 'Giulia', displayName: 'Giulia', age: 24,
     bio: 'FPS, co-op e sessioni chill la sera.', photoUrl: 'https://picsum.photos/seed/giulia24p/200/200',
     coverUrl: 'https://picsum.photos/seed/giulia24c/600/900', interests: ['FPS', 'Co-op', 'Anime'],
     favoriteGames: ['Valorant', 'Overwatch 2', 'Phasmophobia'], platforms: ['PC'], lookingFor: ['Duo', 'Friendship'],
-    discordTag: 'giuplays', spotifyArtist: 'The Japanese House', country: 'Italia', timezone: 'CET',
-    messages: [
-      { id: 'm1-msg-1', text: 'Ti va una duo stasera?', minutesAgo: 60, sender: 'other' },
-      { id: 'm1-msg-2', text: 'Sì, dopo le 21 ci sono', minutesAgo: 58, sender: 'demo' },
-      { id: 'm1-msg-3', text: 'Perfetto, ti aspetto!', minutesAgo: 55, sender: 'other' },
-    ],
+    discordTag: 'giuplays', spotifyArtist: 'The Japanese House', country: 'Italia', timezone: 'CET', isMock: true,
   },
   {
     uid: 'm2',
@@ -51,12 +47,7 @@ const demoUsers = [
     bio: 'Main jungle, ranked ma senza drama.', photoUrl: 'https://picsum.photos/seed/marco27p/200/200',
     coverUrl: 'https://picsum.photos/seed/marco27c/600/900', interests: ['MOBA', 'Competitive', 'Tech'],
     favoriteGames: ['League of Legends', 'TFT'], platforms: ['PC'], lookingFor: ['Ranked', 'Community'],
-    discordTag: 'marcojungler', riotId: 'Marco#EUW', steamId: 'marco27', country: 'Italia', timezone: 'CET',
-    messages: [
-      { id: 'm2-msg-1', text: 'Ranked o chill?', minutesAgo: 180, sender: 'other' },
-      { id: 'm2-msg-2', text: 'Una ranked e poi chill', minutesAgo: 178, sender: 'demo' },
-      { id: 'm2-msg-3', text: "Let's go allora", minutesAgo: 175, sender: 'other' },
-    ],
+    discordTag: 'marcojungler', riotId: 'Marco#EUW', steamId: 'marco27', country: 'Italia', timezone: 'CET', isMock: true,
   },
   {
     uid: 'm3',
@@ -64,12 +55,7 @@ const demoUsers = [
     bio: 'Indie cozy, design e late night Discord.', photoUrl: 'https://picsum.photos/seed/sofia22p/200/200',
     coverUrl: 'https://picsum.photos/seed/sofia22c/600/900', interests: ['Cozy', 'Design', 'Community'],
     favoriteGames: ['Stardew Valley', 'It Takes Two'], platforms: ['PC', 'Switch'], lookingFor: ['Chill', 'Friendship'],
-    discordTag: 'sofiacozy', spotifyArtist: 'Clairo', country: 'Italia', timezone: 'CET',
-    messages: [
-      { id: 'm3-msg-1', text: 'Hey! Hai mai giocato a Stardew?', minutesAgo: 300, sender: 'other' },
-      { id: 'm3-msg-2', text: 'Mai provato, mi incuriosisce!', minutesAgo: 298, sender: 'demo' },
-      { id: 'm3-msg-3', text: 'Te lo mostro volentieri, è super rilassante', minutesAgo: 295, sender: 'other' },
-    ],
+    discordTag: 'sofiacozy', spotifyArtist: 'Clairo', country: 'Italia', timezone: 'CET', isMock: true,
   },
   {
     uid: 'm4',
@@ -77,10 +63,7 @@ const demoUsers = [
     bio: 'Cerco duo, match e gente con vibe pulita.', photoUrl: 'https://picsum.photos/seed/alex25p/200/200',
     coverUrl: 'https://picsum.photos/seed/alex25c/600/900', interests: ['Music', 'Gaming', 'Movies'],
     favoriteGames: ['Fortnite', 'Minecraft', 'Party Animals'], platforms: ['PC', 'PlayStation'], lookingFor: ['Friendship', 'Community'],
-    discordTag: 'alexvibes', country: 'Italia', timezone: 'CET',
-    messages: [
-      { id: 'm4-msg-1', text: 'Stessa vibe, stesso caos 🔥', minutesAgo: 400, sender: 'other' },
-    ],
+    discordTag: 'alexvibes', country: 'Italia', timezone: 'CET', isMock: true,
   },
   {
     uid: 'm5',
@@ -88,12 +71,42 @@ const demoUsers = [
     bio: "Late night chat, co-op e un po' di chaos.", photoUrl: 'https://picsum.photos/seed/noemi23p/200/200',
     coverUrl: 'https://picsum.photos/seed/noemi23c/600/900', interests: ['Chat', 'Co-op', 'Music'],
     favoriteGames: ['Overcooked', 'The Sims 4', 'Roblox'], platforms: ['PC', 'Mobile'], lookingFor: ['Chill', 'Duo'],
-    discordTag: 'n0eheart', spotifyArtist: 'PinkPantheress', country: 'Italia', timezone: 'CET',
-    messages: [
-      { id: 'm5-msg-1', text: 'Facciamo un game e poi chat?', minutesAgo: 250, sender: 'other' },
-      { id: 'm5-msg-2', text: 'Volentieri! Che giochi hai?', minutesAgo: 248, sender: 'demo' },
-      { id: 'm5-msg-3', text: 'Overcooked per iniziare?', minutesAgo: 245, sender: 'other' },
-    ],
+    discordTag: 'n0eheart', spotifyArtist: 'PinkPantheress', country: 'Italia', timezone: 'CET', isMock: true,
+  },
+];
+
+const discoverMocks = [
+  {
+    uid: 'disc1',
+    email: 'disc1@wevo.app', password: 'wevo1234', username: 'latebyte', name: 'Nina', displayName: 'Nina', age: 24,
+    bio: 'Late-night byte vibes e duo improvvisate.', photoUrl: 'https://picsum.photos/seed/disc1p/200/200',
+    coverUrl: 'https://picsum.photos/seed/disc1c/600/900', interests: ['Tech', 'Gaming', 'Music'],
+    favoriteGames: ['Valorant', 'Minecraft'], platforms: ['PC'], lookingFor: ['Friendship', 'Duo'],
+    country: 'Italia', timezone: 'CET', isMock: true,
+  },
+  {
+    uid: 'disc2',
+    email: 'disc2@wevo.app', password: 'wevo1234', username: 'pixelroma', name: 'Lorenzo', displayName: 'Lorenzo', age: 26,
+    bio: 'Pixel art, co-op, caffeina e room glow.', photoUrl: 'https://picsum.photos/seed/disc2p/200/200',
+    coverUrl: 'https://picsum.photos/seed/disc2c/600/900', interests: ['Design', 'Co-op', 'Community'],
+    favoriteGames: ['It Takes Two', 'Stardew Valley'], platforms: ['PC', 'Switch'], lookingFor: ['Chill', 'Community'],
+    country: 'Italia', timezone: 'CET', isMock: true,
+  },
+  {
+    uid: 'disc3',
+    email: 'disc3@wevo.app', password: 'wevo1234', username: 'rushmode', name: 'Sara', displayName: 'Sara', age: 23,
+    bio: 'Rush mode, headset sempre acceso.', photoUrl: 'https://picsum.photos/seed/disc3p/200/200',
+    coverUrl: 'https://picsum.photos/seed/disc3c/600/900', interests: ['FPS', 'Anime', 'Chat'],
+    favoriteGames: ['Overwatch 2', 'Apex Legends'], platforms: ['PC'], lookingFor: ['Duo', 'Chat'],
+    country: 'Italia', timezone: 'CET', isMock: true,
+  },
+  {
+    uid: 'disc4',
+    email: 'disc4@wevo.app', password: 'wevo1234', username: 'moonroom', name: 'Elia', displayName: 'Elia', age: 25,
+    bio: 'Room cozy, synthwave e sessioni chill.', photoUrl: 'https://picsum.photos/seed/disc4p/200/200',
+    coverUrl: 'https://picsum.photos/seed/disc4c/600/900', interests: ['Movies', 'Music', 'Community'],
+    favoriteGames: ['Fortnite', 'Party Animals'], platforms: ['PC', 'PlayStation'], lookingFor: ['Friendship', 'Community'],
+    country: 'Italia', timezone: 'CET', isMock: true,
   },
 ];
 
@@ -170,29 +183,7 @@ async function ensureProfile(profile, matches) {
   }, { merge: true });
 }
 
-async function seedMessages(chatId, demoUid, otherUid, messages) {
-  const now = Date.now();
-  let lastMessage = null;
-  let lastMessageAt = null;
-  let lastSenderId = null;
-
-  for (const msg of messages) {
-    const createdAt = Timestamp.fromMillis(now - msg.minutesAgo * 60 * 1000);
-    const senderId = msg.sender === 'demo' ? demoUid : otherUid;
-    await db.collection('chats').doc(chatId).collection('messages').doc(msg.id).set({
-      text: msg.text,
-      senderId,
-      createdAt,
-    }, { merge: true });
-    lastMessage = msg.text;
-    lastMessageAt = createdAt;
-    lastSenderId = senderId;
-  }
-
-  return { lastMessage, lastMessageAt, lastSenderId };
-}
-
-async function seedPair(demoUid, user) {
+async function seedMatchedMock(demoUid, user) {
   const authState = await ensureAuthUser(user);
   await ensureProfile(user, [demoUid]);
 
@@ -213,14 +204,12 @@ async function seedPair(demoUid, user) {
     createdAt: now,
   }, { merge: true });
 
-  const seeded = await seedMessages(matchId, demoUid, user.uid, user.messages ?? []);
-
   const sharedData = {
     users: [demoUid, user.uid],
     createdAt: now,
-    lastMessage: seeded.lastMessage,
-    lastMessageAt: seeded.lastMessageAt,
-    lastSenderId: seeded.lastSenderId,
+    lastMessage: null,
+    lastMessageAt: null,
+    lastSenderId: null,
     updatedAt: now,
   };
 
@@ -237,19 +226,36 @@ async function seedPair(demoUid, user) {
     updatedAt: now,
   }, { merge: true });
 
-  console.log(`✓ ${user.email} (${authState})`);
+  console.log(`✓ matched mock ${user.email} (${authState})`);
+}
+
+async function seedDiscoverMock(demoUid, user) {
+  const authState = await ensureAuthUser(user);
+  await ensureProfile(user, []);
+
+  await db.collection('swipes').doc(`${user.uid}_${demoUid}`).set({
+    from: user.uid,
+    to: demoUid,
+    liked: true,
+    createdAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  console.log(`✓ discover mock ${user.email} (${authState})`);
 }
 
 async function main() {
   console.log('🌱 Seeding Wevo demo data with firebase-admin');
 
   const demoAuthState = await ensureAuthUser(demoAccount);
-  await ensureProfile(demoAccount, demoUsers.map((user) => user.uid));
+  await ensureProfile(demoAccount, matchedMocks.map((user) => user.uid));
   console.log(`✓ ${demoAccount.email} (${demoAuthState})`);
 
-  for (const user of demoUsers) {
-    user.isMock = true;
-    await seedPair(demoAccount.uid, user);
+  for (const user of matchedMocks) {
+    await seedMatchedMock(demoAccount.uid, user);
+  }
+
+  for (const user of discoverMocks) {
+    await seedDiscoverMock(demoAccount.uid, user);
   }
 
   console.log('✅ Wevo seed complete');
