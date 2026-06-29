@@ -164,6 +164,7 @@ async function ensureProfile(profile, matches) {
     riotId: profile.riotId ?? null,
     timezone: profile.timezone,
     country: profile.country,
+    isMock: profile.isMock === true,
     matches,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
@@ -247,6 +248,7 @@ async function main() {
   console.log(`✓ ${demoAccount.email} (${demoAuthState})`);
 
   for (const user of demoUsers) {
+    user.isMock = true;
     await seedPair(demoAccount.uid, user);
   }
 

@@ -292,14 +292,15 @@ export const sendChatMessage = onCall({ region: CALLABLE_REGION }, async (reques
         { merge: true },
       );
 
-      return { ok: true, chatId, messageId: messageRef.id };
+      const otherIsMock = otherSnap.data()?.isMock === true;
+      return { ok: true, chatId, messageId: messageRef.id, otherIsMock };
     });
 
     if (!result.ok) {
       return result;
     }
 
-    if (otherUserId.startsWith('m')) {
+    if (result.otherIsMock) {
       const replyText = 'OK';
       const replyAt = Timestamp.fromDate(new Date(Date.now() + 1500));
       await chatRef.collection('messages').add({
