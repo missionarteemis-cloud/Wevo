@@ -5,6 +5,19 @@ import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../theme.dart';
 
+/// Stato consegna messaggio (stile WhatsApp).
+/// pending = orologino (non ancora partito), sent = spunta singola,
+/// delivered = doppia grigia, read = doppia blu (questi ultimi due via
+/// read-receipt lato backend — prossimo step).
+enum _MsgStatus { pending, sent, delivered, read }
+
+/// Messaggio inviato localmente, in attesa di conferma dallo stream.
+class _Optimistic {
+  final String text;
+  final DateTime createdAt;
+  _Optimistic(this.text) : createdAt = DateTime.now();
+}
+
 class ChatDetailScreen extends StatefulWidget {
   final UserModel user;
   const ChatDetailScreen({super.key, required this.user});
@@ -16,39 +29,47 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
-  bool _sending = false;
   String? _sendError;
+  final List<_Optimistic> _optimistic = [];
 
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty) return;
 
+    // Optimistic: il messaggio "parte" subito (orologino), input libero.
+    _controller.clear();
+    final opt = _Optimistic(text);
     setState(() {
-      _sending = true;
+      _optimistic.add(opt);
       _sendError = null;
     });
+    _scrollToBottomSoon();
 
     final result = await ChatService.sendMessage(otherUserId: widget.user.id, text: text);
     if (!mounted) return;
 
     if (result.ok) {
-      _controller.clear();
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (!_scrollController.hasClients) return;
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      // il messaggio reale arriva dallo stream con la spunta → ripulisci l'ottimistico
+      Future.delayed(const Duration(milliseconds: 700), () {
+        if (mounted) setState(() => _optimistic.remove(opt));
       });
     } else {
       setState(() {
+        _optimistic.remove(opt);
         _sendError = _messageForSendError(result.error);
+        _controller.text = text; // ripristina per ritentare
       });
     }
+  }
 
-    setState(() {
-      _sending = false;
+  void _scrollToBottomSoon() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -98,18 +119,38 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       stream: ChatService.messagesStream(otherUserId: widget.user.id),
                       builder: (context, snapshot) {
                         final messages = snapshot.data ?? const [];
-                        if (snapshot.connectionState == ConnectionState.waiting && messages.isEmpty) {
+                        if (snapshot.connectionState == ConnectionState.waiting &&
+                            messages.isEmpty &&
+                            _optimistic.isEmpty) {
                           return const Center(child: CircularProgressIndicator(color: WevoColors.pink));
                         }
-                        if (messages.isEmpty) {
+                        // Ottimistici non ancora confermati nello stream (dedup per testo).
+                        final myTexts = messages
+                            .where((m) => m['senderId'] == ChatService.currentUid)
+                            .map((m) => (m['text'] ?? '') as String)
+                            .toSet();
+                        final shownOpt = _optimistic.where((o) => !myTexts.contains(o.text)).toList();
+
+                        if (messages.isEmpty && shownOpt.isEmpty) {
                           return _ChatEmptyState(name: widget.user.name);
                         }
 
                         return ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.fromLTRB(16, 6, 16, 22),
-                          itemCount: messages.length,
+                          itemCount: messages.length + shownOpt.length,
                           itemBuilder: (context, index) {
+                            // Coda: messaggi ottimistici (orologino).
+                            if (index >= messages.length) {
+                              final o = shownOpt[index - messages.length];
+                              return _MessageBubble(
+                                text: o.text,
+                                time: _formatTime(o.createdAt),
+                                isMe: true,
+                                isAutomated: false,
+                                status: _MsgStatus.pending,
+                              );
+                            }
                             final msg = messages[index];
                             final isMe = msg['senderId'] == ChatService.currentUid;
                             final createdAt = msg['createdAt'];
@@ -126,6 +167,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                                   time: time,
                                   isMe: isMe,
                                   isAutomated: msg['automated'] == true,
+                                  status: _MsgStatus.sent,
                                 ),
                               ],
                             );
@@ -197,21 +239,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     minLines: 1,
                     maxLines: 4,
                     style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35),
-                    decoration: InputDecoration(
-                      hintText: _sending ? 'Invio in corso...' : 'Scrivi qualcosa di bello...',
-                      hintStyle: const TextStyle(color: WevoColors.textMuted),
+                    decoration: const InputDecoration(
+                      hintText: 'Scrivi qualcosa di bello...',
+                      hintStyle: TextStyle(color: WevoColors.textMuted),
                       border: InputBorder.none,
                       isDense: true,
                     ),
                     onSubmitted: (_) => _sendMessage(),
-                    enabled: !_sending,
                   ),
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: _sending ? null : _sendMessage,
+                  onTap: _sendMessage,
                   child: Opacity(
-                    opacity: _sending ? 0.72 : 1,
+                    opacity: 1,
                     child: Container(
                       width: 48,
                       height: 48,
@@ -224,12 +265,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [wevoGlow(WevoColors.pink, blur: 22)],
                       ),
-                      child: _sending
-                          ? const Padding(
-                              padding: EdgeInsets.all(14),
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.north_rounded, color: Colors.white, size: 20),
+                      child: const Icon(Icons.north_rounded, color: Colors.white, size: 20),
                     ),
                   ),
                 ),
@@ -617,8 +653,28 @@ class _MessageBubble extends StatelessWidget {
   final String time;
   final bool isMe;
   final bool isAutomated;
+  final _MsgStatus status;
 
-  const _MessageBubble({required this.text, required this.time, required this.isMe, required this.isAutomated});
+  const _MessageBubble({
+    required this.text,
+    required this.time,
+    required this.isMe,
+    required this.isAutomated,
+    this.status = _MsgStatus.sent,
+  });
+
+  Widget _statusIcon() {
+    switch (status) {
+      case _MsgStatus.pending:
+        return Icon(Icons.access_time_rounded, size: 12, color: Colors.white.withValues(alpha: 0.7));
+      case _MsgStatus.sent:
+        return Icon(Icons.done_rounded, size: 13, color: Colors.white.withValues(alpha: 0.78));
+      case _MsgStatus.delivered:
+        return Icon(Icons.done_all_rounded, size: 13, color: Colors.white.withValues(alpha: 0.78));
+      case _MsgStatus.read:
+        return const Icon(Icons.done_all_rounded, size: 13, color: Color(0xFF6DD7D7));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -688,7 +744,7 @@ class _MessageBubble extends StatelessWidget {
                       ),
                       if (isMe) ...[
                         const SizedBox(width: 6),
-                        Icon(Icons.done_all_rounded, size: 13, color: Colors.white.withValues(alpha: 0.76)),
+                        _statusIcon(),
                       ],
                     ],
                   ),
