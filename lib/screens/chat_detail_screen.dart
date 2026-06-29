@@ -49,9 +49,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     if (!mounted) return;
 
     if (result.ok) {
-      // il messaggio reale arriva dallo stream con la spunta → ripulisci l'ottimistico
-      Future.delayed(const Duration(milliseconds: 700), () {
-        if (mounted) setState(() => _optimistic.remove(opt));
+      // L'ottimistico resta finché lo stream non conferma il messaggio
+      // (pulizia guidata dallo stream nel builder). Safety net se lo stream
+      // non lo consegnasse per qualche motivo.
+      Future.delayed(const Duration(seconds: 6), () {
+        if (mounted && _optimistic.contains(opt)) {
+          setState(() => _optimistic.remove(opt));
+        }
       });
     } else {
       setState(() {
@@ -63,11 +67,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   void _scrollToBottomSoon() {
-    Future.delayed(const Duration(milliseconds: 100), () {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 240),
         curve: Curves.easeOut,
       );
     });
@@ -130,6 +134,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                             .map((m) => (m['text'] ?? '') as String)
                             .toSet();
                         final shownOpt = _optimistic.where((o) => !myTexts.contains(o.text)).toList();
+
+                        // Pulisci gli ottimistici già confermati dallo stream (post-frame).
+                        if (shownOpt.length != _optimistic.length) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!mounted) return;
+                            setState(() => _optimistic.removeWhere((o) => myTexts.contains(o.text)));
+                          });
+                        }
 
                         if (messages.isEmpty && shownOpt.isEmpty) {
                           return _ChatEmptyState(name: widget.user.name);
