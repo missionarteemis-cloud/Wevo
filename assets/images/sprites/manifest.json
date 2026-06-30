@@ -3,12 +3,12 @@
 
   "avatar_base": {
     "type": "avatar",
-    "frameW": 64,
-    "frameH": 96,
-    "anchor": [32, 84],
+    "frameW": 116,
+    "frameH": 116,
+    "anchor": [58, 88],
     "directions": 8,
     "actions": {
-      "idle": { "sheet": "sprites/avatar_idle.png", "frames": 2, "fps": 2 },
+      "idle": { "sheet": "sprites/avatar_idle.png", "frames": 1, "fps": 2 },
       "walk": { "sheet": "sprites/avatar_walk.png", "frames": 4, "fps": 8 }
     }
   },
