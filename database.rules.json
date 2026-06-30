@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "presence": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "roomPresence": {
+      "$ownerUid": {
+        ".read": "auth != null",
+        "$visitorUid": {
+          ".write": "auth != null && auth.uid == $visitorUid",
+          ".validate": "newData.hasChildren(['x','y']) || !newData.exists()"
+        }
+      }
+    },
+    "roomChat": {
+      "$ownerUid": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$msgId": {
+          ".validate": "!newData.exists() || newData.child('senderId').val() === auth.uid"
+        }
+      }
+    }
+  }
+}

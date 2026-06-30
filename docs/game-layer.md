@@ -145,3 +145,45 @@ Store interno per comprare oggetti virtuali con **coins**. UI: **finestra hover 
 ### Responsabilità
 - **Backend (Craw):** collezione `catalog` + **seed catalogo** (Node admin), coins iniziali server-side, **Cloud Function `buyItem`** (setup Functions + deploy), poi place/take.
 - **Frontend (Claude):** **finestra store draggabile** (tab per Tipo, lista item con prezzo + Compra, saldo coins), lettura `catalog`, chiamata `buyItem`, inventario UI + piazzamento dal fantasma.
+
+## 19. Presence / visitatori — architettura + challenge (2026-06-30)
+
+Rende le stanze **vive**: pallino verde "online", entrare nella stanza di un altro dalla Discovery, vedersi e muoversi **live** dentro la stanza.
+
+### Stack: Firebase Realtime Database (NUOVO servizio)
+RTDB (non Firestore) per tutto ciò che è effimero/ad alta frequenza: presenza, posizioni avatar, chat-stanza. Istanza in **europe-west1** (latenza con utenti IT). Firestore resta per il persistente (rooms, profili, store).
+
+### Modello dati (RTDB)
+- `presence/{uid}` =
+  - `connections/{connId}: true` — **una per ogni tab/device aperto**, con `onDisconnect: remove`. **online = esiste almeno una connection.** (Pattern canonico Firebase: gestisce multi-tab e disconnessioni.)
+  - `lastSeen: <serverTimestamp>` — aggiornato da heartbeat (~20s) + `onDisconnect`.
+  - `inRoom: ownerUid | null` — stanza in cui si trova ora.
+- `roomPresence/{ownerUid}/{visitorUid}` = `{ name, avatar, x, y, emote, sittingOn, ts }`, `onDisconnect: remove`. Avatar vivi nella stanza.
+- `roomChat/{ownerUid}/{msgId}` = `{ senderId, name, text, ts }` — effimera (§5).
+
+### Regole RTDB
+- `presence/{uid}`: write solo `auth.uid == uid`; read se autenticato.
+- `roomPresence/{ownerUid}/{visitorUid}`: write solo `auth.uid == visitorUid`; read se autenticato.
+- `roomChat/{ownerUid}/{id}`: write se autenticato e `senderId == auth.uid`; read se autenticato.
+
+### ⚠️ CHALLENGE / problemi (alcuni nuovi, da decidere)
+1. **`onDisconnect` lento su web.** Se chiudi la tab "sporco", il socket cade dopo ~30-60s → l'utente resta "online fantasma". **Mitigazione:** heartbeat `lastSeen`; trattare offline se `lastSeen` troppo vecchio anche se la connection persiste.
+2. **Multi-tab / multi-device.** Stesso uid su 2 tab → 2 presence. `onDisconnect` di una non deve spegnere l'altra. **Soluzione adottata:** presence **per-connessione** (`connections/{connId}`), online = qualsiasi connection viva.
+3. **"Online" è ambiguo.** Tab in background = aperta ma non guardi. v1: online = app aperta. **Refinement:** usare visibilità tab (online solo se in foreground). Da decidere.
+4. **Collisione avatar multiplayer.** Le celle occupate ora includono **gli altri visitatori in tempo reale** → il pathfinding deve ricalcolare quando un altro si muove. Un avatar per cella (stile Habbo). Complica il movimento.
+5. **Gate "proprietario online" è SOFT.** Il client controlla la presence prima di entrare, ma un client malevolo potrebbe entrare in una stanza di un utente offline (le regole RTDB non sanno facilmente "il proprietario è online"). Accettabile per prototipo; hardening dopo (Cloud Function o flag).
+6. **Capacità stanza.** Tanti visitatori = tanti avatar + update. Serve un **cap** (es. max 15-20) + update throttling.
+7. **Abuso roomPresence.** Ognuno scrive il proprio nodo (regole ok), ma può scrivere posizioni fuori griglia/garbage → il client deve validare/clamp ciò che renderizza.
+8. **Cleanup chat effimera** (§5): "l'ultimo che esce svuota" è racy. v1 best-effort; v2 Cloud Function su `roomPresence` vuoto.
+9. **Ping al proprietario** quando qualcuno entra: serve un canale notifica (in-app via presence/inRoom, o push). Per ora in-app.
+10. **Costo letture presence.** Leggere la presence per ogni card della Discovery scala male. **Mitigazione:** leggere solo per le card visibili; struttura RTDB piatta per uid.
+
+### Responsabilità
+- **Backend (Craw):** **creare l'istanza RTDB** (console) + deploy regole `database.rules.json`; più avanti Cloud Function di cleanup chat-stanza.
+- **Frontend (Claude):** `PresenceService` (connection-presence + heartbeat + inRoom + room visitors), pallino verde sulle card, rendering multiplayer degli avatar nella stanza, chat-stanza.
+
+### Slice di partenza (gettare le basi)
+1. RTDB attivo + regole.
+2. `PresenceService`: online/offline (connection + heartbeat) → **pallino verde** in Discovery.
+3. `enterRoom/leaveRoom` + `roomPresence` → render degli **altri avatar** nella stanza.
+4. Poi: chat-stanza live, emote condivise, ping proprietario, [entra nella room] dalla Discovery.
