@@ -24,7 +24,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
   List<Map<String, dynamic>> _messages = const [];
   String _groupFilter = 'Tutte';
   String? _sendError;
-  bool _sending = false;
+  final List<Map<String, dynamic>> _optimistic = [];
 
   @override
   void initState() {
@@ -62,35 +62,49 @@ class _MatchesScreenState extends State<MatchesScreen> {
   Future<void> _sendMsg() async {
     final user = _selected;
     final text = _msgCtrl.text.trim();
-    if (user == null || text.isEmpty || _sending) return;
+    if (user == null || text.isEmpty) return;
 
+    // Optimistic: il messaggio parte subito, il campo si svuota all'istante.
+    _msgCtrl.clear();
+    final opt = <String, dynamic>{
+      'senderId': ChatService.currentUid,
+      'text': text,
+      'createdAt': null,
+      '_pending': true,
+    };
     setState(() {
-      _sending = true;
+      _optimistic.add(opt);
       _sendError = null;
     });
+    _scrollToBottom();
 
     final result = await ChatService.sendMessage(otherUserId: user.id, text: text);
-
     if (!mounted) return;
 
     if (result.ok) {
-      _msgCtrl.clear();
-      Future.delayed(const Duration(milliseconds: 120), () {
-        if (!_scrollCtrl.hasClients) return;
-        _scrollCtrl.animateTo(
-          _scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        );
+      // ripulito quando lo stream conferma (vedi builder); safety net a 6s.
+      Future.delayed(const Duration(seconds: 6), () {
+        if (mounted && _optimistic.contains(opt)) {
+          setState(() => _optimistic.remove(opt));
+        }
       });
     } else {
       setState(() {
+        _optimistic.remove(opt);
         _sendError = _messageForSendError(result.error);
+        _msgCtrl.text = text;
       });
     }
+  }
 
-    setState(() {
-      _sending = false;
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollCtrl.hasClients) return;
+      _scrollCtrl.animateTo(
+        _scrollCtrl.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -430,7 +444,19 @@ class _MatchesScreenState extends State<MatchesScreen> {
       stream: ChatService.messagesStream(otherUserId: u.id),
       builder: (context, snapshot) {
         final messages = snapshot.data ?? const [];
-        if (_messages.length != messages.length) {
+        final myTexts = messages
+            .where((m) => m['senderId'] == ChatService.currentUid)
+            .map((m) => (m['text'] ?? '') as String)
+            .toSet();
+        final shownOpt = _optimistic.where((o) => !myTexts.contains(o['text'])).toList();
+        if (shownOpt.length != _optimistic.length) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() => _optimistic.removeWhere((o) => myTexts.contains(o['text'])));
+          });
+        }
+        final all = [...messages, ...shownOpt];
+        if (_messages.length != all.length) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!_scrollCtrl.hasClients) return;
             _scrollCtrl.animateTo(
@@ -440,7 +466,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
             );
           });
         }
-        _messages = messages;
+        _messages = all;
 
         return Column(
           children: [
@@ -502,7 +528,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
               ),
             ),
             Expanded(
-              child: messages.isEmpty
+              child: all.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -521,8 +547,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
                   : ListView.builder(
                       controller: _scrollCtrl,
                       padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
-                      itemCount: messages.length,
-                      itemBuilder: (_, i) => _msgBubble(messages[i]),
+                      itemCount: all.length,
+                      itemBuilder: (_, i) => _msgBubble(all[i]),
                     ),
             ),
             if (_sendError != null)
@@ -555,14 +581,13 @@ class _MatchesScreenState extends State<MatchesScreen> {
                           Expanded(
                             child: TextField(
                               controller: _msgCtrl,
-                              decoration: InputDecoration(
-                                hintText: _sending ? 'Invio in corso...' : 'Scrivi un messaggio...',
-                                hintStyle: const TextStyle(color: Color(0xFF6B6178)),
+                              decoration: const InputDecoration(
+                                hintText: 'Scrivi un messaggio...',
+                                hintStyle: TextStyle(color: Color(0xFF6B6178)),
                                 border: InputBorder.none,
                               ),
                               style: const TextStyle(color: Colors.white, fontSize: 15),
                               onSubmitted: (_) => _sendMsg(),
-                              enabled: !_sending,
                             ),
                           ),
                         ],
@@ -571,24 +596,16 @@ class _MatchesScreenState extends State<MatchesScreen> {
                   ),
                   const SizedBox(width: 10),
                   GestureDetector(
-                    onTap: _sending ? null : _sendMsg,
-                    child: Opacity(
-                      opacity: _sending ? 0.7 : 1,
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: WevoColors.primaryGradient,
-                          boxShadow: [BoxShadow(color: WevoColors.hotPink.withValues(alpha: 0.5), blurRadius: 20)],
-                        ),
-                        child: _sending
-                            ? const Padding(
-                                padding: EdgeInsets.all(12),
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.send, color: Colors.white, size: 18),
+                    onTap: _sendMsg,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: WevoColors.primaryGradient,
+                        boxShadow: [BoxShadow(color: WevoColors.hotPink.withValues(alpha: 0.5), blurRadius: 20)],
                       ),
+                      child: const Icon(Icons.send, color: Colors.white, size: 18),
                     ),
                   ),
                 ],
@@ -624,7 +641,20 @@ class _MatchesScreenState extends State<MatchesScreen> {
           children: [
             Text((msg['text'] ?? '') as String, style: TextStyle(color: isMe ? Colors.white : const Color(0xFFE4E0EF), fontSize: 15, height: 1.4)),
             const SizedBox(height: 4),
-            Text(time, style: TextStyle(color: isMe ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF6B6178), fontSize: 11)),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(time, style: TextStyle(color: isMe ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF6B6178), fontSize: 11)),
+                if (isMe) ...[
+                  const SizedBox(width: 5),
+                  Icon(
+                    msg['_pending'] == true ? Icons.access_time_rounded : Icons.done_rounded,
+                    size: 12,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
