@@ -8,6 +8,7 @@ import 'screens/discover_screen.dart';
 import 'screens/matches_screen.dart';
 import 'screens/profile_screen.dart';
 import 'services/store_service.dart';
+import 'services/presence_service.dart';
 
 /// Global navigator key for switching tabs from child screens.
 final mainShellKey = GlobalKey<MainShellState>();
@@ -81,6 +82,8 @@ class MainShellState extends State<MainShell> {
     super.initState();
     // Coins iniziali non-bloccanti (idempotente).
     StoreService.claimStarterCoins();
+    // Presence online (best-effort, multi-tab safe).
+    PresenceService.instance.start();
   }
 
   static void switchTab(int tab) {

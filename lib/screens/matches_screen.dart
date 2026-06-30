@@ -7,6 +7,7 @@ import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/match_service.dart';
 import '../theme.dart';
+import '../widgets/online_dot.dart';
 
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key});
@@ -361,15 +362,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                           Positioned(
                             bottom: 0,
                             right: 0,
-                            child: Container(
-                              width: 14,
-                              height: 14,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFF9EDFA6),
-                                border: Border.all(color: const Color(0xFF0E0718), width: 2),
-                              ),
-                            ),
+                            child: OnlineDot(uid: user.id, size: 14),
                           ),
                         ],
                       ),
