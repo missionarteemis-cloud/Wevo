@@ -28,13 +28,12 @@ class RoomService {
     return room;
   }
 
-  /// Carica la stanza di un altro utente (visita, sola lettura).
-  static Future<RoomModel?> loadRoom(String ownerUid) async {
-    final snap = await _roomRef(ownerUid).get();
-    if (snap.exists && snap.data() != null) {
-      return RoomModel.fromMap(snap.data()!, snap.id);
-    }
-    return null;
+  /// Stream live della stanza di un utente (visita: arredo + modifiche live).
+  static Stream<RoomModel?> roomStream(String ownerUid) {
+    return _roomRef(ownerUid).snapshots().map((snap) =>
+        (snap.exists && snap.data() != null)
+            ? RoomModel.fromMap(snap.data()!, snap.id)
+            : null);
   }
 
   static Future<void> saveFurniture(List<RoomFurnitureItem> furniture) async {

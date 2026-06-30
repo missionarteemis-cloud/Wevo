@@ -36,6 +36,7 @@ class _RoomScreenState extends State<RoomScreen> {
   bool _inventoryOpen = false;
   Offset _invPos = const Offset(40, 110);
   StreamSubscription<List<RoomVisitor>>? _visitorsSub;
+  StreamSubscription<RoomModel?>? _roomSub;
 
   String get _myUid => FirebaseAuth.instance.currentUser!.uid;
   bool get _isVisiting => widget.ownerUid != null && widget.ownerUid != _myUid;
@@ -99,8 +100,9 @@ class _RoomScreenState extends State<RoomScreen> {
   Future<void> _load() async {
     try {
       if (_isVisiting) {
-        final room = await RoomService.loadRoom(_targetOwner);
-        if (room != null) _game.applyRoom(room);
+        _roomSub = RoomService.roomStream(_targetOwner).listen((room) {
+          if (room != null) _game.applyRoom(room);
+        });
         if (mounted) {
           setState(() => _roomName = widget.ownerName != null
               ? 'Stanza di ${widget.ownerName}'
@@ -127,6 +129,7 @@ class _RoomScreenState extends State<RoomScreen> {
   @override
   void dispose() {
     _visitorsSub?.cancel();
+    _roomSub?.cancel();
     PresenceService.instance.leaveRoom(_targetOwner);
     _game.selected.dispose();
     _game.moving.dispose();

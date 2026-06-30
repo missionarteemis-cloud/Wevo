@@ -104,7 +104,8 @@ class IsoRoom extends PositionComponent
   static const int rows = 7;
   static const double tileW = 64;
   static const double tileH = 32;
-  static const double _speed = 220; // px/s
+  static const double _speed = 130; // px/s (movimento più calmo)
+  static const double _visitorLerp = 9.0; // velocità di interpolazione visitatori
 
   final Vector2 _origin = Vector2.zero();
 
@@ -120,9 +121,14 @@ class IsoRoom extends PositionComponent
   List<RoomFurnitureItem> _furniture = const [];
   final Set<int> _occupied = <int>{};
 
-  // Altri visitatori live (multiplayer)
+  // Altri visitatori live (multiplayer) + posizione interpolata (anti-scatti)
   List<RoomVisitor> _visitors = const [];
-  void setVisitors(List<RoomVisitor> v) => _visitors = v;
+  final Map<String, Vector2> _visitorPos = {};
+  void setVisitors(List<RoomVisitor> v) {
+    _visitors = v;
+    final ids = v.map((e) => e.uid).toSet();
+    _visitorPos.removeWhere((uid, _) => !ids.contains(uid));
+  }
 
   // Anteprima spostamento/piazzamento (null = nessun fantasma attivo)
   RoomFurnitureItem? _ghost;
@@ -309,7 +315,10 @@ class IsoRoom extends PositionComponent
     final prev = <int, int>{};
     final visited = <int>{_key(sc, sr)};
     final queue = <(int, int)>[(sc, sr)];
-    const dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+    const dirs = [
+      (1, 0), (-1, 0), (0, 1), (0, -1), // ortogonali
+      (1, 1), (1, -1), (-1, 1), (-1, -1), // diagonali
+    ];
     var found = false;
     while (queue.isNotEmpty) {
       final (cc, cr) = queue.removeAt(0);
@@ -474,6 +483,8 @@ class IsoRoom extends PositionComponent
   @override
   void update(double dt) {
     super.update(dt);
+    _updateVisitors(dt);
+
     if (_path.isEmpty) return;
     final (nc, nr) = _path.first;
     final dest = _tileCenter(nc, nr);
@@ -488,6 +499,21 @@ class IsoRoom extends PositionComponent
       onMyMove(_avatarCol, _avatarRow); // aggiorna la mia posizione live
     } else {
       _avatarPos.add(delta.normalized() * step);
+    }
+  }
+
+  /// Interpola le posizioni dei visitatori verso la loro cella target
+  /// (anti-scatti: gli update RTDB sono discreti, qui si smussa lato client).
+  void _updateVisitors(double dt) {
+    final t = (_visitorLerp * dt).clamp(0.0, 1.0);
+    for (final v in _visitors) {
+      final target = _tileCenter(v.x.clamp(0, cols - 1), v.y.clamp(0, rows - 1));
+      final cur = _visitorPos[v.uid];
+      if (cur == null) {
+        _visitorPos[v.uid] = target.clone();
+      } else {
+        cur.add((target - cur) * t);
+      }
     }
   }
 
@@ -524,18 +550,23 @@ class IsoRoom extends PositionComponent
   }
 
   void _renderObjects(Canvas canvas) {
+    // Profondità = bordo frontale della cella (+tileH/2), uguale per tutti →
+    // ordinamento coerente avatar/visitatori/mobili (niente overlap strani).
     final renderables = <(double, void Function())>[
       for (final item in _furniture)
         (_furnitureBaseY(item), () => _drawFurniture(canvas, item)),
       for (final v in _visitors)
-        (_tileCenter(v.x.clamp(0, cols - 1), v.y.clamp(0, rows - 1)).y,
-            () => _renderVisitor(canvas, v)),
-      (_avatarPos.y, () => _renderAvatar(canvas)),
+        (_visitorRenderPos(v).y + tileH / 2, () => _renderVisitor(canvas, v)),
+      (_avatarPos.y + tileH / 2, () => _renderAvatar(canvas)),
     ]..sort((a, b) => a.$1.compareTo(b.$1));
     for (final r in renderables) {
       r.$2();
     }
   }
+
+  Vector2 _visitorRenderPos(RoomVisitor v) =>
+      _visitorPos[v.uid] ??
+      _tileCenter(v.x.clamp(0, cols - 1), v.y.clamp(0, rows - 1));
 
   double _furnitureBaseY(RoomFurnitureItem item) {
     final (w, h) = footprintWH(furnitureDef(item.itemId), item.rot);
@@ -637,7 +668,7 @@ class IsoRoom extends PositionComponent
 
   /// Altro visitatore alla sua cella (colore distinto).
   void _renderVisitor(Canvas canvas, RoomVisitor v) {
-    final c = _tileCenter(v.x.clamp(0, cols - 1), v.y.clamp(0, rows - 1));
+    final c = _visitorRenderPos(v);
     final p = Offset(c.x, c.y);
     canvas.drawOval(
       Rect.fromCenter(center: p, width: tileW * 0.6, height: tileH * 0.55),
