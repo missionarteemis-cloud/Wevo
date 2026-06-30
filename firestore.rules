@@ -41,8 +41,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Mappa username -> {uid, email} per unicità e risoluzione login PRIMA dell'auth.
+    // Lettura pubblica (serve pre-login); creazione solo dal proprietario.
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     match /swipes/{swipeId} {
-      allow read: if signedIn();
+      allow read: if signedIn()
+        && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
       allow create: if signedIn()
         && request.resource.data.from == request.auth.uid
         && request.resource.data.to is string

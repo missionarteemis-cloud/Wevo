@@ -51,6 +51,11 @@ class AuthService {
         'likedBy'      : [],
         'matches'      : [],
       });
+      // Mappa username pubblica: unicità + risoluzione login pre-auth.
+      await _db.collection('usernames').doc(normalizedUsername).set({
+        'uid'  : cred.user!.uid,
+        'email': email,
+      });
       return null;
     } on FirebaseAuthException catch (e) {
       return AppError.fromFirebaseAuth(e.code);
@@ -68,24 +73,14 @@ class AuthService {
 
       if (!email.contains('@')) {
         final normalizedUsername = _normalizeUsername(email);
-        final usernameQuery = await _db
-            .collection('users')
-            .where('username', isEqualTo: normalizedUsername)
-            .limit(1)
-            .get();
-
-        if (usernameQuery.docs.isNotEmpty) {
-          email = usernameQuery.docs.first.data()['email'] as String;
+        // Risoluzione username->email via mappa pubblica (funziona pre-auth).
+        final unameDoc =
+            await _db.collection('usernames').doc(normalizedUsername).get();
+        final resolved = unameDoc.data()?['email'];
+        if (resolved is String && resolved.isNotEmpty) {
+          email = resolved;
         } else {
-          final legacyNameQuery = await _db
-              .collection('users')
-              .where('name', isEqualTo: email)
-              .limit(1)
-              .get();
-          if (legacyNameQuery.docs.isEmpty) {
-            return AppError.validation(WevoErrorCode.authUsernameNotFound);
-          }
-          email = legacyNameQuery.docs.first.data()['email'] as String;
+          return AppError.validation(WevoErrorCode.authUsernameNotFound);
         }
       }
 
@@ -132,6 +127,18 @@ class AuthService {
 
   static Future<void> logout() => _auth.signOut();
 
+  /// Invia l'email di reset password (Firebase built-in).
+  static Future<AppError?> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return AppError.fromFirebaseAuth(e.code);
+    } catch (e) {
+      return AppError.unknown(e);
+    }
+  }
+
   // Validazione locale prima di chiamare Firebase
   static AppError? validateRegistration({
     required String name,
@@ -157,11 +164,8 @@ class AuthService {
       input.trim().toLowerCase().replaceAll(' ', '_');
 
   static Future<bool> _usernameExists(String username) async {
-    final query = await _db
-        .collection('users')
-        .where('username', isEqualTo: username)
-        .limit(1)
-        .get();
-    return query.docs.isNotEmpty;
+    // Lettura della mappa pubblica usernames/{username} (funziona pre-auth).
+    final doc = await _db.collection('usernames').doc(username).get();
+    return doc.exists;
   }
 }

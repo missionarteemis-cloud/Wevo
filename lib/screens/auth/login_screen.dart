@@ -31,6 +31,39 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _forgotPassword() async {
+    final ctrl = TextEditingController(
+      text: _emailOrNameCtrl.text.contains('@') ? _emailOrNameCtrl.text.trim() : '',
+    );
+    final email = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WevoColors.surface,
+        title: const Text('Reset password', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.emailAddress,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'La tua email',
+            hintStyle: TextStyle(color: WevoColors.textMuted),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Invia')),
+        ],
+      ),
+    );
+    if (email == null || email.isEmpty || !mounted) return;
+    final error = await AuthService.sendPasswordReset(email);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(error == null ? 'Email di reset inviata a $email' : error.message),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -108,7 +141,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 10),
                               Text(_error!, style: const TextStyle(color: WevoColors.coral, fontSize: 13)),
                             ],
-                            const SizedBox(height: 24),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: _forgotPassword,
+                                child: const Text('Password dimenticata?',
+                                    style: TextStyle(color: WevoColors.periwinkle, fontSize: 13)),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
                             // ── BOTTONE NEON SOLIDO (come nell'immagine) ──
                             _neonButton(label: 'Accedi', loading: _loading, onTap: _login),
                             const SizedBox(height: 16),
