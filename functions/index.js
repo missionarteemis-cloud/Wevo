@@ -1,5 +1,4 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { beforeUserCreated } from 'firebase-functions/v2/identity';
 import { initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
 
@@ -7,23 +6,25 @@ initializeApp();
 
 const db = getFirestore();
 const STARTER_COINS = 500;
-const AUTH_REGION = 'us-east1';
 const CALLABLE_REGION = 'us-central1';
 
-export const grantStarterCoins = beforeUserCreated({ region: AUTH_REGION }, async (event) => {
-  const user = event.data;
-  if (!user?.uid) return;
-
-  await db.collection('users').doc(user.uid).set(
-    {
-      uid: user.uid,
-      email: user.email ?? null,
-      coins: STARTER_COINS,
-      updatedAt: FieldValue.serverTimestamp(),
-      createdAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  );
+// Coins iniziali NON-bloccanti: callable idempotente chiamata dall'app dopo il
+// login. (Sostituisce il vecchio trigger bloccante beforeUserCreated, che con le
+// 2nd gen aveva un bug "aud claim" e BLOCCAVA la registrazione.)
+export const claimStarterCoins = onCall({ region: CALLABLE_REGION }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'Authentication required.');
+  }
+  const ref = db.collection('users').doc(request.auth.uid);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const coins = snap.data()?.coins;
+    if (typeof coins === 'number') {
+      return { ok: true, coins, granted: false };
+    }
+    tx.set(ref, { coins: STARTER_COINS, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { ok: true, coins: STARTER_COINS, granted: true };
+  });
 });
 
 export const buyItem = onCall({ region: CALLABLE_REGION }, async (request) => {

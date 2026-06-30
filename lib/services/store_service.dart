@@ -11,6 +11,17 @@ class StoreService {
   static final _db = FirebaseFirestore.instance;
   static final _auth = FirebaseAuth.instance;
 
+  /// Concede i coins iniziali (idempotente, non-bloccante). Chiamata all'ingresso.
+  static Future<void> claimStarterCoins() async {
+    try {
+      await FirebaseFunctions.instanceFor(region: 'us-central1')
+          .httpsCallable('claimStarterCoins')
+          .call();
+    } catch (_) {
+      // best-effort: non bloccare la UI
+    }
+  }
+
   static Future<List<CatalogItem>> loadCatalog() async {
     final snap = await _db.collection('catalog').get();
     return snap.docs
