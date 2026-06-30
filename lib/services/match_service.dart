@@ -13,13 +13,15 @@ class MatchService {
     required bool liked,
   }) async {
     final myRef = _db.collection('users').doc(_uid);
-    final targetRef = _db.collection('users').doc(targetUserId);
     final swipeRef = _db.collection('swipes').doc('${_uid}_$targetUserId');
     final reverseSwipeRef = _db.collection('swipes').doc('${targetUserId}_$_uid');
     final matchId = _pairId(_uid, targetUserId);
     final matchRef = _db.collection('matches').doc(matchId);
 
     return _db.runTransaction((tx) async {
+      // Letture PRIMA delle scritture (vincolo transazioni).
+      final reverseSnap = liked ? await tx.get(reverseSwipeRef) : null;
+
       tx.set(swipeRef, {
         'from': _uid,
         'to': targetUserId,
@@ -28,15 +30,11 @@ class MatchService {
       });
 
       if (!liked) return false;
+      if (reverseSnap?.data()?['liked'] != true) return false;
 
-      final reverseSnap = await tx.get(reverseSwipeRef);
-      final reverseLiked = reverseSnap.data()?['liked'] == true;
-      if (!reverseLiked) return false;
-
-      await _materializeMatchInTransaction(
+      _materializeMatchInTransaction(
         tx: tx,
         myRef: myRef,
-        targetRef: targetRef,
         matchRef: matchRef,
         targetUserId: targetUserId,
       );
@@ -46,7 +44,6 @@ class MatchService {
 
   static Future<bool> ensureMatchIfReciprocal({required String targetUserId}) async {
     final myRef = _db.collection('users').doc(_uid);
-    final targetRef = _db.collection('users').doc(targetUserId);
     final reverseSwipeRef = _db.collection('swipes').doc('${targetUserId}_$_uid');
     final mySwipeRef = _db.collection('swipes').doc('${_uid}_$targetUserId');
     final matchId = _pairId(_uid, targetUserId);
@@ -59,10 +56,9 @@ class MatchService {
       final reverseLiked = reverseSwipe.data()?['liked'] == true;
       if (!mineLiked || !reverseLiked) return false;
 
-      await _materializeMatchInTransaction(
+      _materializeMatchInTransaction(
         tx: tx,
         myRef: myRef,
-        targetRef: targetRef,
         matchRef: matchRef,
         targetUserId: targetUserId,
       );
@@ -72,21 +68,36 @@ class MatchService {
 
   static Future<bool> alreadyMatchedWith(String targetUserId) async {
     try {
-      final me = await _db.collection('users').doc(_uid).get().timeout(const Duration(seconds: 12));
-      final matchIds = List<String>.from(me.data()?['matches'] ?? []);
-      return matchIds.contains(targetUserId);
+      final doc = await _db
+          .collection('matches')
+          .doc(_pairId(_uid, targetUserId))
+          .get()
+          .timeout(const Duration(seconds: 12));
+      return doc.exists;
     } catch (_) {
-      return false;
+      return false; // doc inesistente / read negata = non matchato
     }
   }
 
   static Future<List<UserModel>> fetchMatchUsers() async {
     try {
-      final me = await _db.collection('users').doc(_uid).get().timeout(const Duration(seconds: 12));
-      final matchIds = List<String>.from(me.data()?['matches'] ?? []);
-      if (matchIds.isEmpty) return [];
+      // Sorgente di verità: la collezione `matches` (leggibile da entrambi i
+      // partecipanti), NON l'array `users.matches` (che per l'altro non viene
+      // mai aggiornato — le regole vietano di scrivere il doc altrui).
+      final matchesSnap = await _db
+          .collection('matches')
+          .where('users', arrayContains: _uid)
+          .get()
+          .timeout(const Duration(seconds: 12));
 
-      final futures = matchIds.map(
+      final otherIds = matchesSnap.docs
+          .map((d) => List<String>.from(d.data()['users'] ?? const [])
+              .firstWhere((u) => u != _uid, orElse: () => ''))
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      if (otherIds.isEmpty) return [];
+
+      final futures = otherIds.map(
         (id) => _db.collection('users').doc(id).get().timeout(const Duration(seconds: 12)),
       );
       final docs = await Future.wait(futures);
@@ -119,25 +130,24 @@ class MatchService {
     }
   }
 
-  static Future<void> _materializeMatchInTransaction({
+  /// Crea il match doc (sorgente condivisa, leggibile da entrambi i partecipanti)
+  /// + aggiorna SOLO il proprio array `matches`. NON scrive il doc dell'altro
+  /// utente (le regole lo vietano) e NON legge il match (un get su doc match
+  /// inesistente verrebbe negato). La lista match legge la collezione `matches`.
+  static void _materializeMatchInTransaction({
     required Transaction tx,
     required DocumentReference<Map<String, dynamic>> myRef,
-    required DocumentReference<Map<String, dynamic>> targetRef,
     required DocumentReference<Map<String, dynamic>> matchRef,
     required String targetUserId,
-  }) async {
-    final matchSnap = await tx.get(matchRef);
-    if (!matchSnap.exists) {
-      tx.set(matchRef, {
-        'users': [_uid, targetUserId],
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastMessage': null,
-        'lastMessageAt': null,
-        'lastSenderId': null,
-      });
-    }
+  }) {
+    tx.set(matchRef, {
+      'users': [_uid, targetUserId],
+      'createdAt': FieldValue.serverTimestamp(),
+      'lastMessage': null,
+      'lastMessageAt': null,
+      'lastSenderId': null,
+    });
     tx.set(myRef, {'matches': FieldValue.arrayUnion([targetUserId])}, SetOptions(merge: true));
-    tx.set(targetRef, {'matches': FieldValue.arrayUnion([_uid])}, SetOptions(merge: true));
   }
 
   static String _pairId(String a, String b) {

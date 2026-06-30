@@ -51,8 +51,11 @@ service cloud.firestore {
     }
 
     match /swipes/{swipeId} {
-      allow read: if signedIn()
-        && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+      // read volutamente a signedIn(): il match deve poter leggere lo swipe
+      // INVERSO anche quando NON esiste; una regola che referenzia resource.data
+      // nega i doc inesistenti e rompe il match. Privacy swipe → da chiudere
+      // lato server (discover/match come Cloud Function) più avanti.
+      allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.from == request.auth.uid
         && request.resource.data.to is string
