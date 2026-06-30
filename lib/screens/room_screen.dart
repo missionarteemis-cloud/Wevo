@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flame/game.dart';
@@ -118,6 +119,40 @@ class _RoomScreenState extends State<RoomScreen> {
     }
   }
 
+  void _showFriends() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Amici — pannello in arrivo')),
+    );
+  }
+
+  void _showEmotes() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WevoColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 34),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Text('Emote', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+            SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _EmotePick(icon: Icons.waving_hand, label: 'Saluta', color: WevoColors.gold),
+                _EmotePick(icon: Icons.music_note, label: 'Balla', color: WevoColors.pink),
+                _EmotePick(icon: Icons.celebration, label: 'Festa', color: WevoColors.teal),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _persist(List<RoomFurnitureItem> furniture) async {
     try {
       await RoomService.saveFurniture(furniture);
@@ -148,12 +183,7 @@ class _RoomScreenState extends State<RoomScreen> {
             top: 0,
             left: 0,
             right: 0,
-            child: _Header(
-              roomName: _roomName,
-              canEdit: !_isVisiting,
-              onStore: () => setState(() => _storeOpen = !_storeOpen),
-              onInventory: () => setState(() => _inventoryOpen = !_inventoryOpen),
-            ),
+            child: _Header(roomName: _roomName),
           ),
 
           // Finestra store draggabile
@@ -216,7 +246,18 @@ class _RoomScreenState extends State<RoomScreen> {
             ),
           ),
 
-          const Positioned(left: 0, right: 0, bottom: 24, child: _ActionBar()),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 24,
+            child: _RoomDock(
+              canEdit: !_isVisiting,
+              onFriends: _showFriends,
+              onStore: () => setState(() => _storeOpen = !_storeOpen),
+              onInventory: () => setState(() => _inventoryOpen = !_inventoryOpen),
+              onEmote: _showEmotes,
+            ),
+          ),
 
           if (_error != null)
             Positioned(
@@ -409,15 +450,7 @@ class _MiniAction extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   final String roomName;
-  final bool canEdit;
-  final VoidCallback onStore;
-  final VoidCallback onInventory;
-  const _Header({
-    required this.roomName,
-    required this.canEdit,
-    required this.onStore,
-    required this.onInventory,
-  });
+  const _Header({required this.roomName});
 
   @override
   Widget build(BuildContext context) {
@@ -463,12 +496,6 @@ class _Header extends StatelessWidget {
                 ],
               ),
             ),
-            if (canEdit) ...[
-              _CircleBtn(icon: Icons.storefront, onTap: onStore),
-              const SizedBox(width: 8),
-              _CircleBtn(icon: Icons.inventory_2_outlined, onTap: onInventory),
-              const SizedBox(width: 8),
-            ],
             _CircleBtn(
               icon: Icons.close,
               onTap: () => Navigator.of(context).maybePop(),
@@ -480,56 +507,119 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _ActionBar extends StatelessWidget {
-  const _ActionBar();
+/// Dock stile Habbo: barra strumenti in basso (Amici / Store / Zaino / Emote).
+class _RoomDock extends StatelessWidget {
+  final bool canEdit;
+  final VoidCallback onFriends;
+  final VoidCallback onStore;
+  final VoidCallback onInventory;
+  final VoidCallback onEmote;
+  const _RoomDock({
+    required this.canEdit,
+    required this.onFriends,
+    required this.onStore,
+    required this.onInventory,
+    required this.onEmote,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: WevoColors.surface.withOpacity(0.85),
-          border: Border.all(color: Colors.white.withOpacity(0.06)),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ActionChip(icon: Icons.waving_hand, label: 'Saluta', color: WevoColors.gold),
-            _ActionChip(icon: Icons.music_note, label: 'Balla', color: WevoColors.pink),
-            _ActionChip(icon: Icons.emoji_emotions_outlined, label: 'Emote', color: WevoColors.teal),
-          ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: LinearGradient(
+                colors: [Colors.white.withValues(alpha: 0.13), Colors.white.withValues(alpha: 0.04)],
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.24), blurRadius: 22, offset: const Offset(0, 10)),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _DockButton(icon: Icons.people_alt_rounded, label: 'Amici', color: WevoColors.lightBlue, onTap: onFriends),
+                if (canEdit) ...[
+                  _DockButton(icon: Icons.storefront_rounded, label: 'Store', color: WevoColors.pink, onTap: onStore),
+                  _DockButton(icon: Icons.backpack_rounded, label: 'Zaino', color: WevoColors.gold, onTap: onInventory),
+                ],
+                _DockButton(icon: Icons.emoji_emotions_rounded, label: 'Emote', color: WevoColors.teal, onTap: onEmote),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-class _ActionChip extends StatelessWidget {
+class _EmotePick extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-  const _ActionChip({required this.icon, required this.label, required this.color});
+  const _EmotePick({required this.icon, required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: color.withOpacity(0.12),
-        ),
-        child: Row(
+    return GestureDetector(
+      onTap: () => Navigator.of(context).maybePop(), // wiring emote → prossimo step
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withValues(alpha: 0.16),
+              border: Border.all(color: color.withValues(alpha: 0.35)),
+            ),
+            child: Icon(icon, color: color, size: 26),
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _DockButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _DockButton({required this.icon, required this.label, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 7),
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(15),
+                color: color.withValues(alpha: 0.16),
+                border: Border.all(color: color.withValues(alpha: 0.32)),
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 10, fontWeight: FontWeight.w700),
             ),
           ],
         ),
