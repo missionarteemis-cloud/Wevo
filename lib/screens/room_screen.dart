@@ -7,10 +7,12 @@ import 'package:flutter/material.dart';
 
 import '../game/furniture_catalog.dart';
 import '../game/room_game.dart';
+import '../models/avatar_figure.dart';
 import '../models/room_model.dart';
 import '../services/inventory_service.dart';
 import '../services/presence_service.dart';
 import '../services/room_service.dart';
+import '../services/user_service.dart';
 import '../theme.dart';
 import 'inventory_window.dart';
 import 'store_window.dart';
@@ -31,6 +33,7 @@ class RoomScreen extends StatefulWidget {
 class _RoomScreenState extends State<RoomScreen> {
   final RoomGame _game = RoomGame();
   String _roomName = 'La tua stanza';
+  AvatarFigure _figure = AvatarFigure.standard;
   String? _error;
   bool _storeOpen = false;
   Offset _storePos = const Offset(20, 96);
@@ -52,13 +55,33 @@ class _RoomScreenState extends State<RoomScreen> {
     }
     _game.onMyMove = (x, y) =>
         PresenceService.instance.updatePosition(_targetOwner, x, y);
+    _loadFigure();
     _enterAndSubscribe();
     _load();
   }
 
+  /// Carica l'aspetto del mio avatar e lo applica (gioco + presence).
+  Future<void> _loadFigure() async {
+    final fig = await UserService.fetchMyFigure();
+    if (!mounted) return;
+    setState(() => _figure = fig);
+    _game.setMyFigure(fig);
+    PresenceService.instance.setMyHoodie(_targetOwner, fig.hoodie);
+  }
+
+  /// Cambia il colore della felpa: aggiorna gioco, persiste, propaga ai visitatori.
+  void _setHoodie(int? hoodie) {
+    final fig = _figure.copyWith(hoodie: hoodie, resetHoodie: hoodie == null);
+    setState(() => _figure = fig);
+    _game.setMyFigure(fig);
+    UserService.saveFigure(fig);
+    PresenceService.instance.setMyHoodie(_targetOwner, hoodie);
+  }
+
   Future<void> _enterAndSubscribe() async {
     final myName = FirebaseAuth.instance.currentUser?.displayName ?? 'Ospite';
-    await PresenceService.instance.enterRoom(_targetOwner, name: myName);
+    await PresenceService.instance
+        .enterRoom(_targetOwner, name: myName, hoodie: _figure.hoodie);
     _visitorsSub = PresenceService.instance
         .roomVisitors(_targetOwner)
         .listen((visitors) => _game.setVisitors(visitors));
@@ -148,6 +171,48 @@ class _RoomScreenState extends State<RoomScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showAppearance() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WevoColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 34),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Colore felpa',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16)),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 14,
+                runSpacing: 14,
+                children: [
+                  for (final c in kHoodiePresets)
+                    _HoodieSwatch(
+                      color: c,
+                      selected: _figure.hoodie == c,
+                      onTap: () {
+                        _setHoodie(c);
+                        setSheet(() {});
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -255,6 +320,7 @@ class _RoomScreenState extends State<RoomScreen> {
               onFriends: _showFriends,
               onStore: () => setState(() => _storeOpen = !_storeOpen),
               onInventory: () => setState(() => _inventoryOpen = !_inventoryOpen),
+              onAppearance: _showAppearance,
               onEmote: _showEmotes,
             ),
           ),
@@ -513,12 +579,14 @@ class _RoomDock extends StatelessWidget {
   final VoidCallback onFriends;
   final VoidCallback onStore;
   final VoidCallback onInventory;
+  final VoidCallback onAppearance;
   final VoidCallback onEmote;
   const _RoomDock({
     required this.canEdit,
     required this.onFriends,
     required this.onStore,
     required this.onInventory,
+    required this.onAppearance,
     required this.onEmote,
   });
 
@@ -549,6 +617,7 @@ class _RoomDock extends StatelessWidget {
                   _DockButton(icon: Icons.storefront_rounded, label: 'Store', color: WevoColors.pink, onTap: onStore),
                   _DockButton(icon: Icons.backpack_rounded, label: 'Zaino', color: WevoColors.gold, onTap: onInventory),
                 ],
+                _DockButton(icon: Icons.checkroom_rounded, label: 'Aspetto', color: WevoColors.periwinkle, onTap: onAppearance),
                 _DockButton(icon: Icons.emoji_emotions_rounded, label: 'Emote', color: WevoColors.teal, onTap: onEmote),
               ],
             ),
@@ -585,6 +654,43 @@ class _EmotePick extends StatelessWidget {
           const SizedBox(height: 8),
           Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w700)),
         ],
+      ),
+    );
+  }
+}
+
+/// Pastiglia colore felpa nel pannello Aspetto. `color` null = originale.
+class _HoodieSwatch extends StatelessWidget {
+  final int? color;
+  final bool selected;
+  final VoidCallback onTap;
+  const _HoodieSwatch(
+      {required this.color, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color == null ? WevoColors.teal : Color(color!);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: c,
+          border: Border.all(
+            color: selected ? Colors.white : Colors.white24,
+            width: selected ? 3 : 1.5,
+          ),
+          boxShadow: selected
+              ? [BoxShadow(color: c.withValues(alpha: 0.6), blurRadius: 10)]
+              : null,
+        ),
+        child: color == null
+            ? const Icon(Icons.star_rounded, color: Colors.white70, size: 18)
+            : (selected
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 22)
+                : null),
       ),
     );
   }

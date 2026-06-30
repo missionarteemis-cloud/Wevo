@@ -5,6 +5,7 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/avatar_figure.dart';
 import '../models/room_model.dart';
 import '../services/presence_service.dart';
 import '../theme.dart';
@@ -34,6 +35,7 @@ class RoomGame extends FlameGame {
 
   List<RoomFurnitureItem> _pending = const [];
   List<RoomVisitor> _pendingVisitors = const [];
+  AvatarFigure _myFigure = AvatarFigure.standard;
   IsoRoom? _iso;
 
   @override
@@ -51,6 +53,13 @@ class RoomGame extends FlameGame {
     await add(_iso!);
     _iso!.setFurniture(_pending);
     _iso!.setVisitors(_pendingVisitors);
+    _iso!.setMyFigure(_myFigure);
+  }
+
+  /// Aspetto del mio avatar (recolor felpa, ecc.).
+  void setMyFigure(AvatarFigure figure) {
+    _myFigure = figure;
+    _iso?.setMyFigure(figure);
   }
 
   void applyRoom(RoomModel room) {
@@ -177,6 +186,32 @@ class IsoRoom extends PositionComponent
   bool _walking = false;
   final Map<String, int> _visitorFacing = {};
   final Map<String, bool> _visitorWalking = {};
+
+  // Aspetto: skin ricolorate (felpa) in cache per colore. null = base.
+  int? _myHoodie;
+  final Map<int, AvatarSprites> _skinCache = {};
+  final Set<int> _skinBuilding = {};
+
+  void setMyFigure(AvatarFigure figure) {
+    _myHoodie = figure.hoodie;
+    _skinFor(_myHoodie); // pre-costruisce (best-effort)
+  }
+
+  /// Skin per un colore felpa: base se null/non pronta; ricolora async + cache.
+  AvatarSprites? _skinFor(int? hoodie) {
+    final base = _sprites.avatar;
+    if (base == null || hoodie == null) return base;
+    final cached = _skinCache[hoodie];
+    if (cached != null) return cached;
+    if (!_skinBuilding.contains(hoodie)) {
+      _skinBuilding.add(hoodie);
+      base.recolored(Color(hoodie)).then((s) {
+        _skinCache[hoodie] = s;
+        _skinBuilding.remove(hoodie);
+      });
+    }
+    return base; // base finché la variante ricolorata non è pronta
+  }
 
   @override
   Future<void> onLoad() async {
@@ -722,7 +757,9 @@ class IsoRoom extends PositionComponent
   }
 
   void _renderAvatar(Canvas canvas) {
-    if (_blitActor(canvas, _avatarPos, _facing, _walking)) return;
+    if (_blitActor(canvas, _skinFor(_myHoodie), _avatarPos, _facing, _walking)) {
+      return;
+    }
     final p = Offset(_avatarPos.x, _avatarPos.y);
     canvas.drawOval(
       Rect.fromCenter(center: p, width: tileW * 0.6, height: tileH * 0.55),
@@ -741,8 +778,9 @@ class IsoRoom extends PositionComponent
 
   /// Disegna un attore (avatar o visitatore) come sprite animato se l'arte è
   /// caricata. Torna false se non c'è sprite avatar → il chiamante fa fallback.
-  bool _blitActor(Canvas canvas, Vector2 footPoint, int facing, bool walking) {
-    final av = _sprites.avatar;
+  bool _blitActor(Canvas canvas, AvatarSprites? skin, Vector2 footPoint,
+      int facing, bool walking) {
+    final av = skin;
     if (av == null) return false;
     final action = (walking && av.has('walk'))
         ? 'walk'
@@ -756,8 +794,8 @@ class IsoRoom extends PositionComponent
   /// Altro visitatore alla sua cella (colore distinto).
   void _renderVisitor(Canvas canvas, RoomVisitor v) {
     final c = _visitorRenderPos(v);
-    if (_blitActor(
-        canvas, c, _visitorFacing[v.uid] ?? 2, _visitorWalking[v.uid] ?? false)) {
+    if (_blitActor(canvas, _skinFor(v.hoodie), c, _visitorFacing[v.uid] ?? 2,
+        _visitorWalking[v.uid] ?? false)) {
       return;
     }
     final p = Offset(c.x, c.y);

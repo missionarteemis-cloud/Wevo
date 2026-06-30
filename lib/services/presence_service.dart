@@ -93,7 +93,7 @@ class PresenceService {
 
   /// Entra in una stanza: segna `inRoom` + scrive il proprio nodo roomPresence.
   Future<void> enterRoom(String ownerUid,
-      {required String name, int x = 3, int y = 3}) async {
+      {required String name, int x = 3, int y = 3, int? hoodie}) async {
     final uid = _uid;
     if (uid == null) return;
     try {
@@ -107,8 +107,20 @@ class PresenceService {
         'name': name,
         'x': x,
         'y': y,
+        if (hoodie != null) 'hoodie': hoodie,
         'ts': ServerValue.timestamp,
       });
+    } catch (_) {}
+  }
+
+  /// Aggiorna l'aspetto (es. colore felpa) nel nodo roomPresence corrente.
+  Future<void> setMyHoodie(String ownerUid, int? hoodie) async {
+    final uid = _uid;
+    if (uid == null) return;
+    try {
+      await _database
+          .ref('roomPresence/$ownerUid/$uid')
+          .update({'hoodie': hoodie});
     } catch (_) {}
   }
 
@@ -168,6 +180,7 @@ class RoomVisitor {
   final int x;
   final int y;
   final String? emote;
+  final int? hoodie; // colore felpa (recolor), null = originale
 
   const RoomVisitor({
     required this.uid,
@@ -175,6 +188,7 @@ class RoomVisitor {
     required this.x,
     required this.y,
     this.emote,
+    this.hoodie,
   });
 
   factory RoomVisitor.fromMap(String uid, Map<String, dynamic> d) =>
@@ -184,5 +198,6 @@ class RoomVisitor {
         x: (d['x'] as num? ?? 0).toInt(),
         y: (d['y'] as num? ?? 0).toInt(),
         emote: d['emote'] as String?,
+        hoodie: (d['hoodie'] as num?)?.toInt(),
       );
 }

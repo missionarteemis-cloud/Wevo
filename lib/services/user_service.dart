@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
+import '../models/avatar_figure.dart';
 import '../core/errors/app_error.dart';
 import '../core/errors/error_codes.dart';
 
@@ -137,6 +138,33 @@ class UserService {
     } catch (e) {
       debugPrint('[UserService] errore fetchDiscoverUsers: $e');
       return [];
+    }
+  }
+
+  /// Aspetto avatar dell'utente corrente (campo `figure` sul doc users).
+  static Future<AvatarFigure> fetchMyFigure() async {
+    try {
+      final doc = await _db.collection('users').doc(_uid).get()
+          .timeout(const Duration(seconds: 10));
+      final fig = doc.data()?['figure'];
+      return AvatarFigure.fromMap(
+          fig is Map ? Map<String, dynamic>.from(fig) : null);
+    } catch (e) {
+      debugPrint('[UserService] errore fetchMyFigure: $e');
+      return AvatarFigure.standard;
+    }
+  }
+
+  /// Persiste l'aspetto avatar (merge, best-effort).
+  static Future<void> saveFigure(AvatarFigure figure) async {
+    try {
+      await _db
+          .collection('users')
+          .doc(_uid)
+          .set({'figure': figure.toMap()}, SetOptions(merge: true))
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('[UserService] errore saveFigure: $e');
     }
   }
 }

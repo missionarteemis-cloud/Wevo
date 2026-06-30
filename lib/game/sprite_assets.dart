@@ -1,9 +1,12 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flame/cache.dart';
 import 'package:flame/components.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
+
+import 'avatar_recolor.dart';
 
 /// Caricamento sprite del game layer (vedi docs/art-spec.md §9).
 ///
@@ -84,35 +87,72 @@ class FurnitureSprite {
   }
 }
 
-/// Sprite avatar animati: per azione (`idle`/`walk`…) una griglia
-/// [riga=direzione][frame], + mappatura 8 direzioni logiche → (riga, mirror).
+/// Sprite avatar animati: per azione (`idle`/`walk`…) tiene il **foglio
+/// sorgente** + geometria, e ne costruisce gli sprite per (direzione, frame).
+/// Sa produrre una variante **ricolorata** (felpa) con la stessa geometria.
 class AvatarSprites {
   AvatarSprites._({
     required this.frameSize,
     required this.anchorFrac,
-    required this.actions,
-    required this.fps,
+    required this.directions,
+    required Map<String, _AvatarAction> actions,
     required this.dir8,
-  });
+  }) : _actions = actions {
+    _buildSprites();
+  }
 
   final Vector2 frameSize;
   final Vector2 anchorFrac; // 0..1 (piedi)
-  final Map<String, List<List<Sprite>>> actions; // name -> [row][frame]
-  final Map<String, double> fps;
+  final int directions;
+  final Map<String, _AvatarAction> _actions; // name -> foglio + meta
   final List<({int row, bool flip})> dir8; // 8 direzioni logiche
+  final Map<String, List<List<Sprite>>> _sprites = {}; // name -> [row][frame]
 
-  bool has(String action) => actions[action]?.isNotEmpty ?? false;
+  void _buildSprites() {
+    _actions.forEach((name, a) {
+      _sprites[name] = [
+        for (var d = 0; d < directions; d++)
+          [
+            for (var f = 0; f < a.frames; f++)
+              Sprite(a.image,
+                  srcPosition:
+                      Vector2(f * frameSize.x, (a.rowStart + d) * frameSize.y),
+                  srcSize: frameSize),
+          ],
+      ];
+    });
+  }
+
+  bool has(String action) => _sprites[action]?.isNotEmpty ?? false;
 
   /// Frame per (azione, direzione 0..7, tempo trascorso) + flag mirror.
   ({Sprite sprite, bool flip}) frame(String action, int dir, double elapsed) {
-    final rows = actions[action]!;
+    final rows = _sprites[action]!;
     final m = dir8[dir % 8];
     final row = m.row.clamp(0, rows.length - 1);
     final frames = rows[row];
     final f = frames.length <= 1
         ? 0
-        : (elapsed * (fps[action] ?? 6)).floor() % frames.length;
+        : (elapsed * _actions[action]!.fps).floor() % frames.length;
     return (sprite: frames[f], flip: m.flip);
+  }
+
+  /// Variante con la **felpa** ricolorata verso [hoodie]. Async: rigenera le
+  /// immagini una volta sola (il chiamante la mette in cache).
+  Future<AvatarSprites> recolored(ui.Color hoodie) async {
+    final out = <String, _AvatarAction>{};
+    for (final e in _actions.entries) {
+      final img = await recolorHoodie(e.value.image, hoodie);
+      out[e.key] =
+          _AvatarAction(img, e.value.frames, e.value.rowStart, e.value.fps);
+    }
+    return AvatarSprites._(
+      frameSize: frameSize,
+      anchorFrac: anchorFrac,
+      directions: directions,
+      actions: out,
+      dir8: dir8,
+    );
   }
 
   static Future<AvatarSprites> _load(
@@ -123,8 +163,7 @@ class AvatarSprites {
     final directions = (cfg['directions'] as num?)?.toInt() ?? 8;
     final defaultSheet = cfg['sheet'] as String?;
 
-    final actions = <String, List<List<Sprite>>>{};
-    final fps = <String, double>{};
+    final actions = <String, _AvatarAction>{};
     final actionsCfg = (cfg['actions'] as Map<String, dynamic>);
     for (final e in actionsCfg.entries) {
       final ac = e.value as Map<String, dynamic>;
@@ -133,23 +172,15 @@ class AvatarSprites {
       final rowStart = (ac['row'] as num?)?.toInt() ??
           (ac['rowStart'] as num?)?.toInt() ??
           0;
-      fps[e.key] = (ac['fps'] as num?)?.toDouble() ?? 6;
-      actions[e.key] = [
-        for (var d = 0; d < directions; d++)
-          [
-            for (var f = 0; f < frames; f++)
-              Sprite(img,
-                  srcPosition: Vector2(f * fw, (rowStart + d) * fh),
-                  srcSize: Vector2(fw, fh)),
-          ],
-      ];
+      final fps = (ac['fps'] as num?)?.toDouble() ?? 6;
+      actions[e.key] = _AvatarAction(img, frames, rowStart, fps);
     }
 
     return AvatarSprites._(
       frameSize: Vector2(fw, fh),
       anchorFrac: Vector2(a[0] / fw, a[1] / fh),
+      directions: directions,
       actions: actions,
-      fps: fps,
       dir8: _buildDir8(cfg, directions),
     );
   }
@@ -183,4 +214,13 @@ class AvatarSprites {
     }
     return [for (var d = 0; d < 8; d++) (row: d % directions, flip: false)];
   }
+}
+
+/// Foglio sorgente di un'azione + metadati per costruirne gli sprite.
+class _AvatarAction {
+  _AvatarAction(this.image, this.frames, this.rowStart, this.fps);
+  final ui.Image image;
+  final int frames;
+  final int rowStart;
+  final double fps;
 }
