@@ -74,28 +74,25 @@ Sistema **a layer** come Habbo, ma per iniziare basta **un personaggio base** (p
 - **Animazione opzionale:** alcuni mobili 2-4 frame (es. lampada che pulsa, schermo). Stessa logica del manifest.
 
 ## 9. Manifest (come si aggancia al motore)
-Ogni sprite entra via un **manifest JSON** (`assets/sprites/manifest.json`) — aggiungere un asset = una riga, zero codice. Forma:
+Ogni sprite entra via un **manifest JSON** (`assets/images/sprites/manifest.json`) — aggiungere un asset = droppare il PNG + una riga, zero codice. Formato **realmente implementato** (`lib/game/sprite_assets.dart`):
 ```json
 {
   "avatar_base": {
     "type": "avatar",
-    "sheet": "wevo_avatar.png",
     "frameW": 64, "frameH": 96,
     "anchor": [32, 84],
     "directions": 8,
-    "actions": { "idle": {"row": 0, "frames": 2, "fps": 2},
-                 "walk": {"rowStart": 0, "frames": 4, "fps": 8} }
+    "actions": { "idle": {"sheet": "sprites/avatar_idle.png", "frames": 2, "fps": 2},
+                 "walk": {"sheet": "sprites/avatar_walk.png", "frames": 4, "fps": 8} }
   },
-  "sofa_neon_2x1": {
-    "type": "furniture",
-    "sheet": "furni/sofa_neon.png",
-    "footprint": [2, 1],
-    "anchor": [0, 40],
-    "frames": 1
-  }
+  "sofa_neon_2x1": { "type": "furniture", "sheet": "sprites/sofa_neon_2x1.png", "anchor": [64, 80] }
 }
 ```
-Il motore (Flame `SpriteAnimationComponent` per gli avatar, `Sprite` per i mobili) legge da qui. *Lato codice predisposto: il catalogo client già mappa `itemId → assetRef` (`lib/game/furniture_catalog.dart`).*
+- **Avatar:** un foglio per azione, righe = direzioni (`0..7`), colonne = frame; `anchor` = piedi (px). Con meno di 8 direzioni: `"directions": 4` (mirror auto) o `"dirMap"` esplicito (8 coppie `[riga, mirror]`).
+- **Mobili:** chiave = `itemId` del catalogo; frame singolo; `anchor` = punto d'appoggio a terra (px, default bottom-center).
+- I path `sheet` sono relativi a `assets/images/` (prefix Flame). Tutto **best-effort**: PNG mancante → fallback geometrico per quell'elemento.
+
+Il caricamento è in `RoomSprites.load()`; il motore (`IsoRoom`) sceglie sprite-vs-geometria a runtime. *Lato codice già pronto: catalogo `itemId` (`lib/game/furniture_catalog.dart`), loader + render con fallback (`lib/game/sprite_assets.dart`, `lib/game/room_game.dart`).*
 
 ## 10. Cosa produrre per primo (ordine di impatto)
 1. **1 personaggio base**: `idle` (2 frame) + `walk` (4 frame) × 4 direzioni (+mirror). → il salto visivo più grande.

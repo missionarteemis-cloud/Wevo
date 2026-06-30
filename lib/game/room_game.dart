@@ -9,6 +9,7 @@ import '../models/room_model.dart';
 import '../services/presence_service.dart';
 import '../theme.dart';
 import 'furniture_catalog.dart';
+import 'sprite_assets.dart';
 
 /// Game layer — stanza isometrica (vedi docs/game-layer.md).
 ///
@@ -128,6 +129,8 @@ class IsoRoom extends PositionComponent
     _visitors = v;
     final ids = v.map((e) => e.uid).toSet();
     _visitorPos.removeWhere((uid, _) => !ids.contains(uid));
+    _visitorFacing.removeWhere((uid, _) => !ids.contains(uid));
+    _visitorWalking.removeWhere((uid, _) => !ids.contains(uid));
   }
 
   // Anteprima spostamento/piazzamento (null = nessun fantasma attivo)
@@ -167,11 +170,20 @@ class IsoRoom extends PositionComponent
   final Paint _visitorBody = Paint()..color = WevoColors.periwinkle;
   final Paint _visitorHead = Paint()..color = WevoColors.lightBlue;
 
+  // ── Sprite pixel-art (fallback geometrico finché i PNG non esistono) ──
+  RoomSprites _sprites = RoomSprites.empty();
+  int _facing = 2; // direzione logica avatar (0..7)
+  double _animT = 0; // clock animazione (s), condiviso avatar/visitatori
+  bool _walking = false;
+  final Map<String, int> _visitorFacing = {};
+  final Map<String, bool> _visitorWalking = {};
+
   @override
   Future<void> onLoad() async {
     size = game.size;
     _recomputeOrigin();
     _syncAvatarPixel();
+    _sprites = await RoomSprites.load(game.images); // best-effort, mai lancia
   }
 
   @override
@@ -483,10 +495,16 @@ class IsoRoom extends PositionComponent
   @override
   void update(double dt) {
     super.update(dt);
+    _animT += dt;
     _updateVisitors(dt);
 
-    if (_path.isEmpty) return;
+    if (_path.isEmpty) {
+      _walking = false;
+      return;
+    }
+    _walking = true;
     final (nc, nr) = _path.first;
+    _facing = _dir8(nc - _avatarCol, nr - _avatarRow); // direzione del prossimo passo
     final dest = _tileCenter(nc, nr);
     final delta = dest - _avatarPos;
     final dist = delta.length;
@@ -502,6 +520,23 @@ class IsoRoom extends PositionComponent
     }
   }
 
+  /// (dc,dr) ∈ {-1,0,1}² → direzione logica 0..7 (orario in spazio griglia).
+  int _dir8(int dc, int dr) {
+    final c = dc.sign;
+    final r = dr.sign;
+    return switch ((c, r)) {
+      (1, 0) => 0,
+      (1, 1) => 1,
+      (0, 1) => 2,
+      (-1, 1) => 3,
+      (-1, 0) => 4,
+      (-1, -1) => 5,
+      (0, -1) => 6,
+      (1, -1) => 7,
+      _ => _facing,
+    };
+  }
+
   /// Interpola le posizioni dei visitatori verso la loro cella target
   /// (anti-scatti: gli update RTDB sono discreti, qui si smussa lato client).
   void _updateVisitors(double dt) {
@@ -511,10 +546,23 @@ class IsoRoom extends PositionComponent
       final cur = _visitorPos[v.uid];
       if (cur == null) {
         _visitorPos[v.uid] = target.clone();
+        _visitorWalking[v.uid] = false;
       } else {
-        cur.add((target - cur) * t);
+        final delta = target - cur;
+        final moving = delta.length > 1.5;
+        _visitorWalking[v.uid] = moving;
+        if (moving) _visitorFacing[v.uid] = _dir8FromScreen(delta);
+        cur.add(delta * t);
       }
     }
+  }
+
+  /// Delta in pixel-schermo → direzione logica (per i visitatori interpolati).
+  int _dir8FromScreen(Vector2 d) {
+    final c = d.x / (tileW / 2) + d.y / (tileH / 2);
+    final r = d.y / (tileH / 2) - d.x / (tileW / 2);
+    int z(double v) => v.abs() < 0.01 ? 0 : (v < 0 ? -1 : 1);
+    return _dir8(z(c), z(r));
   }
 
   // ── Render ──
@@ -614,8 +662,19 @@ class IsoRoom extends PositionComponent
     ..close();
 
   void _drawFurniture(Canvas canvas, RoomFurnitureItem item) {
-    final def = furnitureDef(item.itemId);
     final g = _boxPoints(item);
+    final isSel = selected.value?.instanceId == item.instanceId && _ghost == null;
+
+    // Sprite pixel-art se disponibile, altrimenti box geometrico (fallback).
+    final fs = _sprites.furnitureSprite(item.itemId);
+    if (fs != null) {
+      _blit(canvas, fs.sprite, Vector2(g.bottomC.dx, g.bottomC.dy),
+          fs.anchorFrac, fs.size, false);
+      if (isSel) canvas.drawPath(_topFace(g), _selEdge);
+      return;
+    }
+
+    final def = furnitureDef(item.itemId);
     _drawBox(
       canvas,
       g,
@@ -624,9 +683,22 @@ class IsoRoom extends PositionComponent
       Paint()..color = def.color,
     );
     canvas.drawPath(_topFace(g), _furnEdge);
-    if (selected.value?.instanceId == item.instanceId && _ghost == null) {
-      canvas.drawPath(_topFace(g), _selEdge);
-    }
+    if (isSel) canvas.drawPath(_topFace(g), _selEdge);
+  }
+
+  /// Disegna uno [sprite] con la sua ancora ([anchorFrac], 0..1) appoggiata a
+  /// [point] (px schermo), a scala nativa, con eventuale mirror orizzontale.
+  void _blit(Canvas canvas, Sprite sprite, Vector2 point, Vector2 anchorFrac,
+      Vector2 size, bool flip) {
+    canvas.save();
+    canvas.translate(point.x, point.y);
+    if (flip) canvas.scale(-1, 1);
+    sprite.render(
+      canvas,
+      position: Vector2(-anchorFrac.x * size.x, -anchorFrac.y * size.y),
+      size: size,
+    );
+    canvas.restore();
   }
 
   void _drawGhost(Canvas canvas) {
@@ -650,6 +722,7 @@ class IsoRoom extends PositionComponent
   }
 
   void _renderAvatar(Canvas canvas) {
+    if (_blitActor(canvas, _avatarPos, _facing, _walking)) return;
     final p = Offset(_avatarPos.x, _avatarPos.y);
     canvas.drawOval(
       Rect.fromCenter(center: p, width: tileW * 0.6, height: tileH * 0.55),
@@ -666,9 +739,27 @@ class IsoRoom extends PositionComponent
     canvas.drawCircle(p.translate(0, -33), 8, _avatarHead);
   }
 
+  /// Disegna un attore (avatar o visitatore) come sprite animato se l'arte è
+  /// caricata. Torna false se non c'è sprite avatar → il chiamante fa fallback.
+  bool _blitActor(Canvas canvas, Vector2 footPoint, int facing, bool walking) {
+    final av = _sprites.avatar;
+    if (av == null) return false;
+    final action = (walking && av.has('walk'))
+        ? 'walk'
+        : (av.has('idle') ? 'idle' : (av.has('walk') ? 'walk' : null));
+    if (action == null) return false;
+    final fr = av.frame(action, facing, _animT);
+    _blit(canvas, fr.sprite, footPoint, av.anchorFrac, av.frameSize, fr.flip);
+    return true;
+  }
+
   /// Altro visitatore alla sua cella (colore distinto).
   void _renderVisitor(Canvas canvas, RoomVisitor v) {
     final c = _visitorRenderPos(v);
+    if (_blitActor(
+        canvas, c, _visitorFacing[v.uid] ?? 2, _visitorWalking[v.uid] ?? false)) {
+      return;
+    }
     final p = Offset(c.x, c.y);
     canvas.drawOval(
       Rect.fromCenter(center: p, width: tileW * 0.6, height: tileH * 0.55),

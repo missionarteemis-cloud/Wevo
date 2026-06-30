@@ -1,0 +1,23 @@
+{
+  "_comment": "Manifest sprite Wevo — vedi docs/art-spec.md §9. Droppa i PNG (flat) in assets/images/sprites/ e abilita le entry. Finché un PNG manca, il motore usa il fallback geometrico per quell'elemento. I path 'sheet' sono relativi a assets/images/ (prefix Flame).",
+
+  "avatar_base": {
+    "type": "avatar",
+    "frameW": 64,
+    "frameH": 96,
+    "anchor": [32, 84],
+    "directions": 8,
+    "actions": {
+      "idle": { "sheet": "sprites/avatar_idle.png", "frames": 2, "fps": 2 },
+      "walk": { "sheet": "sprites/avatar_walk.png", "frames": 4, "fps": 8 }
+    }
+  },
+
+  "sofa_neon_2x1":  { "type": "furniture", "sheet": "sprites/sofa_neon_2x1.png",  "anchor": [64, 80] },
+  "table_low_2x2":  { "type": "furniture", "sheet": "sprites/table_low_2x2.png",  "anchor": [64, 96] },
+  "lamp_pillar_1x1":{ "type": "furniture", "sheet": "sprites/lamp_pillar_1x1.png","anchor": [32, 64] },
+  "bed_loft_3x1":   { "type": "furniture", "sheet": "sprites/bed_loft_3x1.png",   "anchor": [96, 80] },
+  "arcade_duo_2x2": { "type": "furniture", "sheet": "sprites/arcade_duo_2x2.png", "anchor": [64, 96] },
+  "neon_rug_3x2":   { "type": "furniture", "sheet": "sprites/neon_rug_3x2.png",   "anchor": [96, 64] },
+  "fridge_pixel_1x1":{ "type": "furniture","sheet": "sprites/fridge_pixel_1x1.png","anchor": [32, 64] }
+}
