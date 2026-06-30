@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
@@ -5,14 +8,20 @@ import '../game/furniture_catalog.dart';
 import '../game/room_game.dart';
 import '../models/room_model.dart';
 import '../services/inventory_service.dart';
+import '../services/presence_service.dart';
 import '../services/room_service.dart';
 import '../theme.dart';
 import 'inventory_window.dart';
 import 'store_window.dart';
 
 /// Schermata stanza — game layer (vedi docs/game-layer.md).
+///
+/// `ownerUid` null = la tua stanza (editabile). `ownerUid` valorizzato = visiti
+/// la stanza di un altro (sola lettura) + presence multiplayer.
 class RoomScreen extends StatefulWidget {
-  const RoomScreen({super.key});
+  final String? ownerUid;
+  final String? ownerName;
+  const RoomScreen({super.key, this.ownerUid, this.ownerName});
 
   @override
   State<RoomScreen> createState() => _RoomScreenState();
@@ -26,13 +35,31 @@ class _RoomScreenState extends State<RoomScreen> {
   Offset _storePos = const Offset(20, 96);
   bool _inventoryOpen = false;
   Offset _invPos = const Offset(40, 110);
+  StreamSubscription<List<RoomVisitor>>? _visitorsSub;
+
+  String get _myUid => FirebaseAuth.instance.currentUser!.uid;
+  bool get _isVisiting => widget.ownerUid != null && widget.ownerUid != _myUid;
+  String get _targetOwner => widget.ownerUid ?? _myUid;
 
   @override
   void initState() {
     super.initState();
-    _game.onPersist = _persist;
-    _game.onPlace = _place;
+    if (!_isVisiting) {
+      _game.onPersist = _persist;
+      _game.onPlace = _place;
+    }
+    _game.onMyMove = (x, y) =>
+        PresenceService.instance.updatePosition(_targetOwner, x, y);
+    _enterAndSubscribe();
     _load();
+  }
+
+  Future<void> _enterAndSubscribe() async {
+    final myName = FirebaseAuth.instance.currentUser?.displayName ?? 'Ospite';
+    await PresenceService.instance.enterRoom(_targetOwner, name: myName);
+    _visitorsSub = PresenceService.instance
+        .roomVisitors(_targetOwner)
+        .listen((visitors) => _game.setVisitors(visitors));
   }
 
   Future<void> _reloadRoom() async {
@@ -71,9 +98,19 @@ class _RoomScreenState extends State<RoomScreen> {
 
   Future<void> _load() async {
     try {
-      final room = await RoomService.loadOrCreateMyRoom();
-      _game.applyRoom(room);
-      if (mounted) setState(() => _roomName = room.name);
+      if (_isVisiting) {
+        final room = await RoomService.loadRoom(_targetOwner);
+        if (room != null) _game.applyRoom(room);
+        if (mounted) {
+          setState(() => _roomName = widget.ownerName != null
+              ? 'Stanza di ${widget.ownerName}'
+              : 'Stanza');
+        }
+      } else {
+        final room = await RoomService.loadOrCreateMyRoom();
+        _game.applyRoom(room);
+        if (mounted) setState(() => _roomName = room.name);
+      }
     } catch (e) {
       if (mounted) setState(() => _error = 'Impossibile caricare la stanza.');
     }
@@ -89,6 +126,8 @@ class _RoomScreenState extends State<RoomScreen> {
 
   @override
   void dispose() {
+    _visitorsSub?.cancel();
+    PresenceService.instance.leaveRoom(_targetOwner);
     _game.selected.dispose();
     _game.moving.dispose();
     super.dispose();
@@ -108,13 +147,14 @@ class _RoomScreenState extends State<RoomScreen> {
             right: 0,
             child: _Header(
               roomName: _roomName,
+              canEdit: !_isVisiting,
               onStore: () => setState(() => _storeOpen = !_storeOpen),
               onInventory: () => setState(() => _inventoryOpen = !_inventoryOpen),
             ),
           ),
 
           // Finestra store draggabile
-          if (_storeOpen)
+          if (_storeOpen && !_isVisiting)
             Positioned(
               left: _storePos.dx,
               top: _storePos.dy,
@@ -125,7 +165,7 @@ class _RoomScreenState extends State<RoomScreen> {
             ),
 
           // Finestra inventario draggabile
-          if (_inventoryOpen)
+          if (_inventoryOpen && !_isVisiting)
             Positioned(
               left: _invPos.dx,
               top: _invPos.dy,
@@ -163,6 +203,7 @@ class _RoomScreenState extends State<RoomScreen> {
                 }
                 return _FurniInfo(
                   item: item,
+                  canEdit: !_isVisiting,
                   onMove: _game.startMove,
                   onRotate: _game.rotateSelected,
                   onTake: () => _take(item),
@@ -192,12 +233,14 @@ class _RoomScreenState extends State<RoomScreen> {
 /// Riquadro info oggetto (stile Habbo) con azioni Sposta/Ruota/Prendi.
 class _FurniInfo extends StatelessWidget {
   final RoomFurnitureItem item;
+  final bool canEdit;
   final VoidCallback onMove;
   final VoidCallback onRotate;
   final VoidCallback onTake;
   final VoidCallback onClose;
   const _FurniInfo({
     required this.item,
+    required this.canEdit,
     required this.onMove,
     required this.onRotate,
     required this.onTake,
@@ -236,16 +279,18 @@ class _FurniInfo extends StatelessWidget {
             def.description,
             style: TextStyle(fontSize: 12.5, height: 1.4, color: WevoColors.textMid),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _MiniAction(icon: Icons.open_with, label: 'Sposta', onTap: onMove),
-              const SizedBox(width: 6),
-              _MiniAction(icon: Icons.rotate_right, label: 'Ruota', onTap: onRotate),
-              const SizedBox(width: 6),
-              _MiniAction(icon: Icons.inventory_2_outlined, label: 'Prendi', onTap: onTake),
-            ],
-          ),
+          if (canEdit) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _MiniAction(icon: Icons.open_with, label: 'Sposta', onTap: onMove),
+                const SizedBox(width: 6),
+                _MiniAction(icon: Icons.rotate_right, label: 'Ruota', onTap: onRotate),
+                const SizedBox(width: 6),
+                _MiniAction(icon: Icons.inventory_2_outlined, label: 'Prendi', onTap: onTake),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -361,9 +406,15 @@ class _MiniAction extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   final String roomName;
+  final bool canEdit;
   final VoidCallback onStore;
   final VoidCallback onInventory;
-  const _Header({required this.roomName, required this.onStore, required this.onInventory});
+  const _Header({
+    required this.roomName,
+    required this.canEdit,
+    required this.onStore,
+    required this.onInventory,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -409,10 +460,12 @@ class _Header extends StatelessWidget {
                 ],
               ),
             ),
-            _CircleBtn(icon: Icons.storefront, onTap: onStore),
-            const SizedBox(width: 8),
-            _CircleBtn(icon: Icons.inventory_2_outlined, onTap: onInventory),
-            const SizedBox(width: 8),
+            if (canEdit) ...[
+              _CircleBtn(icon: Icons.storefront, onTap: onStore),
+              const SizedBox(width: 8),
+              _CircleBtn(icon: Icons.inventory_2_outlined, onTap: onInventory),
+              const SizedBox(width: 8),
+            ],
             _CircleBtn(
               icon: Icons.close,
               onTap: () => Navigator.of(context).maybePop(),

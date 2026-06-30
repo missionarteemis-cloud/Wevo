@@ -28,6 +28,15 @@ class RoomService {
     return room;
   }
 
+  /// Carica la stanza di un altro utente (visita, sola lettura).
+  static Future<RoomModel?> loadRoom(String ownerUid) async {
+    final snap = await _roomRef(ownerUid).get();
+    if (snap.exists && snap.data() != null) {
+      return RoomModel.fromMap(snap.data()!, snap.id);
+    }
+    return null;
+  }
+
   static Future<void> saveFurniture(List<RoomFurnitureItem> furniture) async {
     await _roomRef(_uid).set({
       'ownerUid': _uid,

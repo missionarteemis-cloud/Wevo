@@ -2,11 +2,11 @@ import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../main.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/match_service.dart';
 import '../theme.dart';
+import '../widgets/enter_room_button.dart';
 import '../widgets/online_dot.dart';
 
 class MatchesScreen extends StatefulWidget {
@@ -151,72 +151,45 @@ class _MatchesScreenState extends State<MatchesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Categorie floating compatte (un unico container, niente banner/logo).
         Padding(
-          padding: const EdgeInsets.fromLTRB(22, 28, 22, 12),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0x22FFFFFF), Color(0x10FFFFFF)],
-                  ),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.16), blurRadius: 26, offset: const Offset(0, 14)),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () => MainShellState.switchTab(0),
-                      child: ShaderMask(
-                        shaderCallback: (r) => const LinearGradient(colors: [
-                          WevoColors.pink, Color(0xFFB98AE6), Color(0xFF8EC5FF), Color(0xFF5FE0C5),
-                        ]).createShader(r),
-                        child: const Text('wevo', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 30, fontWeight: FontWeight.w600, color: Colors.white)),
+          padding: const EdgeInsets.fromLTRB(22, 24, 22, 12),
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              color: Colors.white.withValues(alpha: 0.05),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+            ),
+            child: Row(
+              children: ['Tutte', 'Online', 'Nuove'].map((f) {
+                final active = _groupFilter == f;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _groupFilter = f),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(999),
+                        gradient: active
+                            ? const LinearGradient(colors: [Color(0x33FA61A6), Color(0x226DD7D7)])
+                            : null,
+                        boxShadow: active ? [wevoGlow(WevoColors.pink, blur: 12)] : null,
+                      ),
+                      child: Text(
+                        f,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: active ? Colors.white : WevoColors.textMuted,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    const Text('Matches', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 23, fontWeight: FontWeight.w700, color: Colors.white)),
-                    const SizedBox(height: 5),
-                    const Text(
-                      'Le conversazioni migliori non sembrano una inbox. Sembrano un posto dove tornare.',
-                      style: TextStyle(color: WevoColors.textMuted, fontSize: 13.5, height: 1.35),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: ['Tutte', 'Online', 'Nuove'].map((f) {
-                        final active = _groupFilter == f;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: GestureDetector(
-                            onTap: () => setState(() => _groupFilter = f),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
-                                gradient: active
-                                    ? const LinearGradient(colors: [Color(0x22FA61A6), Color(0x166DD7D7)])
-                                    : null,
-                                color: active ? null : Colors.white.withValues(alpha: 0.04),
-                                border: Border.all(color: active ? WevoColors.pink.withValues(alpha: 0.45) : Colors.white.withValues(alpha: 0.08)),
-                              ),
-                              child: Text(f, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: active ? Colors.white : WevoColors.textMuted)),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ),
@@ -376,7 +349,11 @@ class _MatchesScreenState extends State<MatchesScreen> {
                                 Expanded(
                                   child: Text(user.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white)),
                                 ),
-                                if (lastTime != null) Text(lastTime, style: const TextStyle(color: WevoColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+                                EnterRoomButton(uid: user.id, name: user.name),
+                                if (lastTime != null) ...[
+                                  const SizedBox(width: 8),
+                                  Text(lastTime, style: const TextStyle(color: WevoColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+                                ],
                               ],
                             ),
                             const SizedBox(height: 7),
@@ -514,6 +491,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
                       ],
                     ),
                   ),
+                  EnterRoomButton(uid: u.id, name: u.name),
+                  const SizedBox(width: 12),
                   Icon(Icons.phone_outlined, color: WevoColors.textMuted, size: 20),
                   const SizedBox(width: 14),
                   Icon(Icons.more_horiz, color: WevoColors.textMuted, size: 22),

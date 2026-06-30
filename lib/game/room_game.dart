@@ -6,6 +6,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/room_model.dart';
+import '../services/presence_service.dart';
 import '../theme.dart';
 import 'furniture_catalog.dart';
 
@@ -27,7 +28,11 @@ class RoomGame extends FlameGame {
   /// Callback al confermare un piazzamento dall'inventario (→ Cloud Function placeItem).
   void Function(RoomFurnitureItem)? onPlace;
 
+  /// Callback quando il mio avatar cambia cella (→ RoomScreen aggiorna roomPresence).
+  void Function(int x, int y)? onMyMove;
+
   List<RoomFurnitureItem> _pending = const [];
+  List<RoomVisitor> _pendingVisitors = const [];
   IsoRoom? _iso;
 
   @override
@@ -40,14 +45,22 @@ class RoomGame extends FlameGame {
       moving: moving,
       onPersist: (f) => onPersist?.call(f),
       onPlace: (item) => onPlace?.call(item),
+      onMyMove: (x, y) => onMyMove?.call(x, y),
     );
     await add(_iso!);
     _iso!.setFurniture(_pending);
+    _iso!.setVisitors(_pendingVisitors);
   }
 
   void applyRoom(RoomModel room) {
     _pending = room.furniture;
     _iso?.setFurniture(room.furniture);
+  }
+
+  /// Altri visitatori live nella stanza (da RoomScreen → PresenceService).
+  void setVisitors(List<RoomVisitor> visitors) {
+    _pendingVisitors = visitors;
+    _iso?.setVisitors(visitors);
   }
 
   void startMove() => _iso?.startMove();
@@ -77,12 +90,14 @@ class IsoRoom extends PositionComponent
     required this.moving,
     required this.onPersist,
     required this.onPlace,
+    required this.onMyMove,
   });
 
   final ValueNotifier<RoomFurnitureItem?> selected;
   final ValueNotifier<bool> moving;
   final void Function(List<RoomFurnitureItem>) onPersist;
   final void Function(RoomFurnitureItem) onPlace;
+  final void Function(int x, int y) onMyMove;
 
   // ── Geometria griglia ──
   static const int cols = 7;
@@ -104,6 +119,10 @@ class IsoRoom extends PositionComponent
   // Arredo + collisione
   List<RoomFurnitureItem> _furniture = const [];
   final Set<int> _occupied = <int>{};
+
+  // Altri visitatori live (multiplayer)
+  List<RoomVisitor> _visitors = const [];
+  void setVisitors(List<RoomVisitor> v) => _visitors = v;
 
   // Anteprima spostamento/piazzamento (null = nessun fantasma attivo)
   RoomFurnitureItem? _ghost;
@@ -134,6 +153,13 @@ class IsoRoom extends PositionComponent
     ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
   final Paint _avatarBody = Paint()..color = WevoColors.pink;
   final Paint _avatarHead = Paint()..color = WevoColors.teal;
+  // Visitatori (multiplayer) — colore distinto dal mio avatar.
+  final Paint _visitorGlow = Paint()..color = const Color(0x33A4A8F3);
+  final Paint _visitorHalo = Paint()
+    ..color = const Color(0x66A4A8F3)
+    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+  final Paint _visitorBody = Paint()..color = WevoColors.periwinkle;
+  final Paint _visitorHead = Paint()..color = WevoColors.lightBlue;
 
   @override
   Future<void> onLoad() async {
@@ -459,6 +485,7 @@ class IsoRoom extends PositionComponent
       _avatarCol = nc;
       _avatarRow = nr;
       _path = _path.sublist(1);
+      onMyMove(_avatarCol, _avatarRow); // aggiorna la mia posizione live
     } else {
       _avatarPos.add(delta.normalized() * step);
     }
@@ -500,6 +527,9 @@ class IsoRoom extends PositionComponent
     final renderables = <(double, void Function())>[
       for (final item in _furniture)
         (_furnitureBaseY(item), () => _drawFurniture(canvas, item)),
+      for (final v in _visitors)
+        (_tileCenter(v.x.clamp(0, cols - 1), v.y.clamp(0, rows - 1)).y,
+            () => _renderVisitor(canvas, v)),
       (_avatarPos.y, () => _renderAvatar(canvas)),
     ]..sort((a, b) => a.$1.compareTo(b.$1));
     for (final r in renderables) {
@@ -603,5 +633,24 @@ class IsoRoom extends PositionComponent
       _avatarBody,
     );
     canvas.drawCircle(p.translate(0, -33), 8, _avatarHead);
+  }
+
+  /// Altro visitatore alla sua cella (colore distinto).
+  void _renderVisitor(Canvas canvas, RoomVisitor v) {
+    final c = _tileCenter(v.x.clamp(0, cols - 1), v.y.clamp(0, rows - 1));
+    final p = Offset(c.x, c.y);
+    canvas.drawOval(
+      Rect.fromCenter(center: p, width: tileW * 0.6, height: tileH * 0.55),
+      _visitorGlow,
+    );
+    canvas.drawCircle(p.translate(0, -16), 16, _visitorHalo);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: p.translate(0, -16), width: 16, height: 30),
+        const Radius.circular(8),
+      ),
+      _visitorBody,
+    );
+    canvas.drawCircle(p.translate(0, -33), 8, _visitorHead);
   }
 }
