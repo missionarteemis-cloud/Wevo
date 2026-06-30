@@ -160,6 +160,44 @@ class AuthService {
     return null;
   }
 
+  /// Validazione per-campo: ritorna { campo: messaggio } per ogni errore.
+  /// Vuoto = tutto valido. Campi: name, username, age, email, password.
+  static Map<String, String> validateRegistrationFields({
+    required String name,
+    required String username,
+    required String ageText,
+    required String email,
+    required String password,
+  }) {
+    final errors = <String, String>{};
+    if (name.trim().isEmpty) errors['name'] = 'Inserisci il tuo nome';
+
+    if (username.trim().isEmpty) {
+      errors['username'] = 'Scegli uno username';
+    } else if (_normalizeUsername(username).length < 3) {
+      errors['username'] = 'Almeno 3 caratteri';
+    }
+
+    final age = int.tryParse(ageText.trim());
+    if (age == null) {
+      errors['age'] = 'Età non valida';
+    } else if (age < 18) {
+      errors['age'] = 'Devi avere almeno 18 anni';
+    } else if (age > 120) {
+      errors['age'] = 'Età non valida';
+    }
+
+    final em = email.trim();
+    if (em.isEmpty) {
+      errors['email'] = "Inserisci un'email";
+    } else if (!RegExp(r'^[\w.\-+]+@[\w\-]+\.[\w\-.]+$').hasMatch(em)) {
+      errors['email'] = "Inserisci un'email valida";
+    }
+
+    if (password.length < 6) errors['password'] = 'Almeno 6 caratteri';
+    return errors;
+  }
+
   static String _normalizeUsername(String input) =>
       input.trim().toLowerCase().replaceAll(' ', '_');
 

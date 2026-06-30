@@ -1,7 +1,7 @@
-import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../core/errors/error_codes.dart';
 import '../../theme.dart';
 import '../../widgets/neon_stars_background.dart';
 import '../onboarding/complete_profile_screen.dart';
@@ -22,23 +22,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _loading = false;
   bool _obscure = true;
   String? _error;
+  Map<String, String> _fieldErrors = {};
 
   Future<void> _register() async {
-    final validation = AuthService.validateRegistration(
+    final fieldErrors = AuthService.validateRegistrationFields(
       name: _nameCtrl.text,
       username: _usernameCtrl.text,
       ageText: _ageCtrl.text,
       email: _emailCtrl.text,
       password: _passCtrl.text,
     );
-    if (validation != null) {
-      setState(() => _error = validation.message);
+    if (fieldErrors.isNotEmpty) {
+      setState(() { _fieldErrors = fieldErrors; _error = null; });
       return;
     }
 
     setState(() {
       _loading = true;
       _error = null;
+      _fieldErrors = {};
     });
 
     final error = await AuthService.register(
@@ -52,8 +54,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return;
     if (error != null) {
       setState(() {
-        _error = error.message;
         _loading = false;
+        // Mappa gli errori backend noti sul campo giusto.
+        if (error.code == WevoErrorCode.authEmailAlreadyInUse) {
+          _fieldErrors = {'email': 'Email già in uso'};
+        } else if (error.code == WevoErrorCode.authUsernameAlreadyInUse) {
+          _fieldErrors = {'username': 'Username già in uso'};
+        } else {
+          _error = error.message;
+        }
       });
     } else {
       Navigator.pushAndRemoveUntil(
@@ -110,11 +119,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         children: [
                           const _CardEyebrow('register'),
                           const SizedBox(height: 14),
-                          _Field(controller: _nameCtrl, hint: 'Nome', icon: Icons.person_outline),
+                          _Field(controller: _nameCtrl, hint: 'Nome', icon: Icons.person_outline, error: _fieldErrors['name']),
                           const SizedBox(height: 12),
-                          _Field(controller: _usernameCtrl, hint: 'Username', icon: Icons.alternate_email),
+                          _Field(controller: _usernameCtrl, hint: 'Username', icon: Icons.alternate_email, error: _fieldErrors['username']),
                           const SizedBox(height: 12),
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
                                 child: _Field(
@@ -122,6 +132,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   hint: 'Età',
                                   icon: Icons.cake_outlined,
                                   keyboardType: TextInputType.number,
+                                  error: _fieldErrors['age'],
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -131,6 +142,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   hint: 'Email',
                                   icon: Icons.email_outlined,
                                   keyboardType: TextInputType.emailAddress,
+                                  error: _fieldErrors['email'],
                                 ),
                               ),
                             ],
@@ -141,6 +153,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             hint: 'Password (min 6 caratteri)',
                             icon: Icons.lock_outline,
                             obscure: _obscure,
+                            error: _fieldErrors['password'],
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
@@ -190,78 +203,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
-
-class _RegisterBackgroundStars extends StatelessWidget {
-  const _RegisterBackgroundStars();
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: SizedBox(
-        width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.height,
-        child: CustomPaint(
-          painter: _NeonStarsPainter(
-            baseColor: const Color(0x668EC5FF),
-            starCount: 70,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NeonStarsPainter extends CustomPainter {
-  final Color baseColor;
-  final int starCount;
-
-  const _NeonStarsPainter({
-    required this.baseColor,
-    required this.starCount,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rng = math.Random(42);
-    for (var i = 0; i < starCount; i++) {
-      final x = rng.nextDouble() * size.width;
-      final y = rng.nextDouble() * size.height;
-      final radius = (0.6 + rng.nextDouble() * 1.4);
-      final opacity = 0.15 + rng.nextDouble() * 0.30;
-      final hueShift = rng.nextDouble() * 0.025;
-
-      final starColor = Color.lerp(
-        const Color(0x668EC5FF),
-        i.isEven ? const Color(0x55FF5FA2) : const Color(0x448EC5FF),
-        hueShift,
-      )!.withOpacity(opacity);
-
-      // outer glow
-      final glowPaint = Paint()
-        ..shader = RadialGradient(
-          colors: [starColor.withOpacity(0.15), Colors.transparent],
-        ).createShader(Rect.fromCircle(center: Offset(x, y), radius: radius * 4));
-      canvas.drawCircle(Offset(x, y), radius * 4, glowPaint);
-
-      // sharp center
-      final corePaint = Paint()..color = starColor.withOpacity(opacity + 0.2);
-      canvas.drawCircle(Offset(x, y), radius, corePaint);
-
-      // cross spike
-      if (radius > 1.2) {
-        final spikePaint = Paint()
-          ..color = starColor.withOpacity(opacity * 0.5)
-          ..strokeWidth = 0.4;
-        canvas.drawLine(Offset(x - radius * 2.5, y), Offset(x + radius * 2.5, y), spikePaint);
-        canvas.drawLine(Offset(x, y - radius * 2.5), Offset(x, y + radius * 2.5), spikePaint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_NeonStarsPainter old) => false;
-}
-
 
 class _RegisterGlassCard extends StatelessWidget {
   final Widget child;
@@ -313,6 +254,7 @@ class _Field extends StatelessWidget {
   final bool obscure;
   final Widget? suffixIcon;
   final TextInputType? keyboardType;
+  final String? error;
 
   const _Field({
     required this.controller,
@@ -321,31 +263,79 @@ class _Field extends StatelessWidget {
     this.obscure = false,
     this.suffixIcon,
     this.keyboardType,
+    this.error,
   });
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      obscureText: obscure,
-      keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: WevoColors.textMuted),
-        prefixIcon: Icon(icon, color: Colors.white54, size: 20),
-        suffixIcon: suffixIcon,
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.06),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide.none,
+    final hasError = error != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Campo in vetro liquido (glassmorphism) ──
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withOpacity(0.18),
+                    Colors.white.withOpacity(0.05),
+                  ],
+                ),
+                border: Border.all(
+                  color: hasError
+                      ? WevoColors.coral.withOpacity(0.75)
+                      : Colors.white.withOpacity(0.20),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  // specular highlight (riflesso "liquid")
+                  BoxShadow(color: Colors.white.withOpacity(0.10), spreadRadius: -1, offset: const Offset(0, 1)),
+                  BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 16, offset: const Offset(0, 8)),
+                ],
+              ),
+              child: TextField(
+                controller: controller,
+                obscureText: obscure,
+                keyboardType: keyboardType,
+                cursorColor: WevoColors.cyan,
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+                decoration: InputDecoration(
+                  hintText: hint,
+                  hintStyle: const TextStyle(color: WevoColors.textMuted),
+                  prefixIcon: Icon(icon, color: Colors.white70, size: 20),
+                  suffixIcon: suffixIcon,
+                  filled: false,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 17),
+                ),
+              ),
+            ),
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: WevoColors.cyan, width: 1.4),
-        ),
-      ),
+        if (hasError)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: WevoColors.coral, size: 13),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    error!,
+                    style: const TextStyle(color: WevoColors.coral, fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
