@@ -40,7 +40,9 @@ class RoomSprites {
       AvatarSprites? avatar;
       final furniture = <String, FurnitureSprite>{};
       for (final entry in map.entries) {
-        final cfg = entry.value as Map<String, dynamic>;
+        final value = entry.value;
+        if (value is! Map<String, dynamic>) continue; // salta _comment ecc.
+        final cfg = value;
         try {
           switch (cfg['type'] as String?) {
             case 'avatar':
