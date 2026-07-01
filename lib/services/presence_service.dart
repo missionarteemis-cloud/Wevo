@@ -175,6 +175,60 @@ class PresenceService {
     }
   }
 
+  // ── Chat stanza (effimera, RTDB roomChat) ──
+
+  /// Invia un messaggio nella chat della stanza [ownerUid].
+  Future<void> sendRoomMessage(String ownerUid,
+      {required String name, required String text}) async {
+    final uid = _uid;
+    final t = text.trim();
+    if (uid == null || t.isEmpty) return;
+    try {
+      await _database.ref('roomChat/$ownerUid').push().set({
+        'senderId': uid,
+        'name': name,
+        'text': t.length > 200 ? t.substring(0, 200) : t,
+        'ts': ServerValue.timestamp,
+      });
+    } catch (_) {}
+  }
+
+  /// Cronologia live (ultimi ~40 messaggi, ordinati per tempo).
+  Stream<List<RoomMessage>> roomChatStream(String ownerUid) {
+    try {
+      return _database
+          .ref('roomChat/$ownerUid')
+          .orderByChild('ts')
+          .limitToLast(40)
+          .onValue
+          .map((event) {
+        final data = event.snapshot.value;
+        if (data is! Map) return <RoomMessage>[];
+        final list = data.entries
+            .map((e) => RoomMessage.fromMap(
+                  e.key as String,
+                  Map<String, dynamic>.from(e.value as Map),
+                ))
+            .toList()
+          ..sort((a, b) => a.ts.compareTo(b.ts));
+        return list;
+      });
+    } catch (_) {
+      return Stream.value(const []);
+    }
+  }
+
+  /// Segna se sto scrivendo (nuvoletta "..." per gli altri).
+  Future<void> setTyping(String ownerUid, bool typing) async {
+    final uid = _uid;
+    if (uid == null) return;
+    try {
+      await _database
+          .ref('roomPresence/$ownerUid/$uid')
+          .update({'typing': typing});
+    } catch (_) {}
+  }
+
   void dispose() {
     _connectedSub?.cancel();
     _heartbeat?.cancel();
@@ -193,6 +247,7 @@ class RoomVisitor {
   final int? skin; // tono pelle (recolor), null = originale
   final int? hair; // colore capelli (recolor), null = originale
   final String base; // sprite set (es. 'avatar_base', 'avatar_female')
+  final bool typing; // sta scrivendo in chat
 
   const RoomVisitor({
     required this.uid,
@@ -204,6 +259,7 @@ class RoomVisitor {
     this.skin,
     this.hair,
     this.base = 'avatar_base',
+    this.typing = false,
   });
 
   factory RoomVisitor.fromMap(String uid, Map<String, dynamic> d) =>
@@ -217,5 +273,31 @@ class RoomVisitor {
         skin: (d['skin'] as num?)?.toInt(),
         hair: (d['hair'] as num?)?.toInt(),
         base: (d['base'] as String?) ?? 'avatar_base',
+        typing: d['typing'] == true,
+      );
+}
+
+/// Un messaggio della chat-stanza (RTDB `roomChat/{owner}/{id}`), effimero.
+class RoomMessage {
+  final String id;
+  final String senderId;
+  final String name;
+  final String text;
+  final int ts;
+
+  const RoomMessage({
+    required this.id,
+    required this.senderId,
+    required this.name,
+    required this.text,
+    required this.ts,
+  });
+
+  factory RoomMessage.fromMap(String id, Map<String, dynamic> d) => RoomMessage(
+        id: id,
+        senderId: (d['senderId'] ?? '') as String,
+        name: (d['name'] ?? '') as String,
+        text: (d['text'] ?? '') as String,
+        ts: (d['ts'] as num? ?? 0).toInt(),
       );
 }

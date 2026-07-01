@@ -41,6 +41,16 @@ class _RoomScreenState extends State<RoomScreen> {
   Offset _invPos = const Offset(40, 110);
   StreamSubscription<List<RoomVisitor>>? _visitorsSub;
   StreamSubscription<RoomModel?>? _roomSub;
+  StreamSubscription<List<RoomMessage>>? _chatSub;
+  List<RoomMessage> _chat = const [];
+  bool _chatOpen = false;
+  final TextEditingController _chatCtrl = TextEditingController();
+  final FocusNode _chatFocus = FocusNode();
+  Timer? _typingTimer;
+  bool _typingActive = false;
+
+  String get _myName =>
+      FirebaseAuth.instance.currentUser?.displayName ?? 'Ospite';
 
   String get _myUid => FirebaseAuth.instance.currentUser!.uid;
   bool get _isVisiting => widget.ownerUid != null && widget.ownerUid != _myUid;
@@ -55,6 +65,7 @@ class _RoomScreenState extends State<RoomScreen> {
     }
     _game.onMyMove = (x, y) =>
         PresenceService.instance.updatePosition(_targetOwner, x, y);
+    _game.setMyUid(_myUid);
     _loadFigure();
     _enterAndSubscribe();
     _load();
@@ -101,6 +112,38 @@ class _RoomScreenState extends State<RoomScreen> {
     _visitorsSub = PresenceService.instance
         .roomVisitors(_targetOwner)
         .listen((visitors) => _game.setVisitors(visitors));
+    _chatSub = PresenceService.instance.roomChatStream(_targetOwner).listen((m) {
+      _game.setChat(m);
+      if (mounted) setState(() => _chat = m);
+    });
+  }
+
+  // ── Chat stanza ──
+  void _setTyping(bool typing) {
+    if (_typingActive == typing) return;
+    _typingActive = typing;
+    _game.setMyTyping(typing);
+    PresenceService.instance.setTyping(_targetOwner, typing);
+  }
+
+  void _onChatChanged(String v) {
+    _typingTimer?.cancel();
+    if (v.trim().isEmpty) {
+      _setTyping(false);
+      return;
+    }
+    _setTyping(true);
+    _typingTimer = Timer(const Duration(seconds: 3), () => _setTyping(false));
+  }
+
+  void _sendChat() {
+    final text = _chatCtrl.text.trim();
+    if (text.isEmpty) return;
+    PresenceService.instance
+        .sendRoomMessage(_targetOwner, name: _myName, text: text);
+    _chatCtrl.clear();
+    _typingTimer?.cancel();
+    _setTyping(false);
   }
 
   Future<void> _reloadRoom() async {
@@ -320,6 +363,10 @@ class _RoomScreenState extends State<RoomScreen> {
   void dispose() {
     _visitorsSub?.cancel();
     _roomSub?.cancel();
+    _chatSub?.cancel();
+    _typingTimer?.cancel();
+    _chatCtrl.dispose();
+    _chatFocus.dispose();
     PresenceService.instance.leaveRoom(_targetOwner);
     _game.selected.dispose();
     _game.moving.dispose();
@@ -401,6 +448,34 @@ class _RoomScreenState extends State<RoomScreen> {
             ),
           ),
 
+          // Barra input chat (in basso a sinistra, sopra il dock)
+          Positioned(
+            left: 12,
+            bottom: 120,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: _ChatInput(
+                controller: _chatCtrl,
+                focusNode: _chatFocus,
+                onChanged: _onChatChanged,
+                onSend: _sendChat,
+              ),
+            ),
+          ),
+
+          // Sidebar cronologia chat completa (da icona dock)
+          if (_chatOpen)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: _ChatSidebar(
+                messages: _chat,
+                myUid: _myUid,
+                onClose: () => setState(() => _chatOpen = false),
+              ),
+            ),
+
           Positioned(
             left: 0,
             right: 0,
@@ -408,6 +483,7 @@ class _RoomScreenState extends State<RoomScreen> {
             child: _RoomDock(
               canEdit: !_isVisiting,
               onFriends: _showFriends,
+              onChat: () => setState(() => _chatOpen = !_chatOpen),
               onStore: () => setState(() => _storeOpen = !_storeOpen),
               onInventory: () => setState(() => _inventoryOpen = !_inventoryOpen),
               onAppearance: _showAppearance,
@@ -667,6 +743,7 @@ class _Header extends StatelessWidget {
 class _RoomDock extends StatelessWidget {
   final bool canEdit;
   final VoidCallback onFriends;
+  final VoidCallback onChat;
   final VoidCallback onStore;
   final VoidCallback onInventory;
   final VoidCallback onAppearance;
@@ -674,6 +751,7 @@ class _RoomDock extends StatelessWidget {
   const _RoomDock({
     required this.canEdit,
     required this.onFriends,
+    required this.onChat,
     required this.onStore,
     required this.onInventory,
     required this.onAppearance,
@@ -703,6 +781,7 @@ class _RoomDock extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _DockButton(icon: Icons.people_alt_rounded, label: 'Amici', color: WevoColors.lightBlue, onTap: onFriends),
+                _DockButton(icon: Icons.chat_bubble_rounded, label: 'Chat', color: WevoColors.cyan, onTap: onChat),
                 if (canEdit) ...[
                   _DockButton(icon: Icons.storefront_rounded, label: 'Store', color: WevoColors.pink, onTap: onStore),
                   _DockButton(icon: Icons.backpack_rounded, label: 'Zaino', color: WevoColors.gold, onTap: onInventory),
@@ -880,6 +959,162 @@ class _CircleBtn extends StatelessWidget {
           border: Border.all(color: Colors.white.withOpacity(0.08)),
         ),
         child: Icon(icon, color: Colors.white70, size: 20),
+      ),
+    );
+  }
+}
+
+/// Barra input chat stile Habbo (vetro), sopra il dock.
+class _ChatInput extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onSend;
+  const _ChatInput({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onSend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.only(left: 12, right: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: Colors.white.withValues(alpha: 0.08),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 150, maxWidth: 230),
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  onChanged: onChanged,
+                  onSubmitted: (_) => onSend(),
+                  textInputAction: TextInputAction.send,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  cursorColor: WevoColors.teal,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    hintText: 'Scrivi…',
+                    hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 11),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.send_rounded,
+                    color: WevoColors.teal, size: 20),
+                onPressed: onSend,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sidebar sinistra con la cronologia chat completa.
+class _ChatSidebar extends StatelessWidget {
+  final List<RoomMessage> messages;
+  final String myUid;
+  final VoidCallback onClose;
+  const _ChatSidebar({
+    required this.messages,
+    required this.myUid,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.horizontal(right: Radius.circular(18)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          width: 280,
+          decoration: BoxDecoration(
+            color: WevoColors.surface.withValues(alpha: 0.86),
+            border: Border(
+                right: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 6, 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.chat_bubble_rounded,
+                          color: WevoColors.cyan, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Chat',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15)),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded,
+                            color: Colors.white54, size: 20),
+                        onPressed: onClose,
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: Colors.white12),
+                Expanded(
+                  child: messages.isEmpty
+                      ? const Center(
+                          child: Text('Nessun messaggio',
+                              style: TextStyle(
+                                  color: Colors.white38, fontSize: 13)))
+                      : ListView.builder(
+                          reverse: true,
+                          padding: const EdgeInsets.all(12),
+                          itemCount: messages.length,
+                          itemBuilder: (_, i) {
+                            final m = messages[messages.length - 1 - i];
+                            final mine = m.senderId == myUid;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 9),
+                              child: RichText(
+                                text: TextSpan(children: [
+                                  TextSpan(
+                                      text: '${m.name}  ',
+                                      style: TextStyle(
+                                          color: mine
+                                              ? WevoColors.gold
+                                              : WevoColors.teal,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12.5)),
+                                  TextSpan(
+                                      text: m.text,
+                                      style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12.5)),
+                                ]),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

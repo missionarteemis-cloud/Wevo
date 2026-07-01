@@ -4,6 +4,7 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' as painting;
 
 import '../models/avatar_figure.dart';
 import '../models/room_model.dart';
@@ -36,6 +37,8 @@ class RoomGame extends FlameGame {
   List<RoomFurnitureItem> _pending = const [];
   List<RoomVisitor> _pendingVisitors = const [];
   AvatarFigure _myFigure = AvatarFigure.standard;
+  String _myUid = '';
+  List<RoomMessage> _pendingChat = const [];
   IsoRoom? _iso;
 
   @override
@@ -51,9 +54,11 @@ class RoomGame extends FlameGame {
       onMyMove: (x, y) => onMyMove?.call(x, y),
     );
     await add(_iso!);
+    _iso!.setMyUid(_myUid);
     _iso!.setFurniture(_pending);
     _iso!.setVisitors(_pendingVisitors);
     _iso!.setMyFigure(_myFigure);
+    _iso!.setChat(_pendingChat);
   }
 
   /// Aspetto del mio avatar (recolor felpa, ecc.).
@@ -61,6 +66,21 @@ class RoomGame extends FlameGame {
     _myFigure = figure;
     _iso?.setMyFigure(figure);
   }
+
+  /// Il mio uid (per attribuire i messaggi al mio avatar).
+  void setMyUid(String uid) {
+    _myUid = uid;
+    _iso?.setMyUid(uid);
+  }
+
+  /// Cronologia chat live (da RoomScreen → PresenceService.roomChatStream).
+  void setChat(List<RoomMessage> messages) {
+    _pendingChat = messages;
+    _iso?.setChat(messages);
+  }
+
+  /// Sto scrivendo io (nuvoletta "..." sopra il mio avatar).
+  void setMyTyping(bool typing) => _iso?.setMyTyping(typing);
 
   void applyRoom(RoomModel room) {
     _pending = room.furniture;
@@ -219,6 +239,37 @@ class IsoRoom extends PositionComponent
       });
     }
     return baseSprites; // base finché la variante ricolorata non è pronta
+  }
+
+  // ── Chat stanza (nuvolette in-world) ──
+  static const double _bubbleLife = 18; // s di vita di una nuvoletta
+  static const double _bubbleDrift = 9; // px/s di salita
+  String _myUid = '';
+  bool _myTyping = false;
+  final List<_Bubble> _bubbles = [];
+  final Set<String> _seenMsgIds = {};
+  bool _chatSeeded = false;
+
+  void setMyUid(String uid) => _myUid = uid;
+  void setMyTyping(bool typing) => _myTyping = typing;
+
+  /// Nuove nuvolette dai messaggi arrivati (il primo batch è solo "storia").
+  void setChat(List<RoomMessage> messages) {
+    if (!_chatSeeded) {
+      for (final m in messages) {
+        _seenMsgIds.add(m.id);
+      }
+      _chatSeeded = true;
+      return;
+    }
+    for (final m in messages) {
+      if (_seenMsgIds.add(m.id)) {
+        _bubbles.add(_Bubble(m.senderId, m.name, m.text));
+      }
+    }
+    if (_bubbles.length > 40) {
+      _bubbles.removeRange(0, _bubbles.length - 40);
+    }
   }
 
   @override
@@ -539,6 +590,10 @@ class IsoRoom extends PositionComponent
   void update(double dt) {
     super.update(dt);
     _animT += dt;
+    for (final b in _bubbles) {
+      b.age += dt;
+    }
+    _bubbles.removeWhere((b) => b.age > _bubbleLife);
     _updateVisitors(dt);
 
     if (_path.isEmpty) {
@@ -616,6 +671,111 @@ class IsoRoom extends PositionComponent
     _renderHighlight(canvas);
     _renderObjects(canvas);
     if (_ghost != null) _drawGhost(canvas);
+    _renderChat(canvas);
+  }
+
+  // ── Render chat (nuvolette sopra la testa) ──
+  void _renderChat(Canvas canvas) {
+    _drawActorChat(canvas, _avatarPos, _myUid, _myTyping);
+    for (final v in _visitors) {
+      _drawActorChat(canvas, _visitorRenderPos(v), v.uid, v.typing);
+    }
+  }
+
+  void _drawActorChat(Canvas canvas, Vector2 pos, String uid, bool typing) {
+    if (uid.isEmpty) return;
+    final headTop = pos.y - 52; // sopra la testa
+    final cx = pos.x;
+    if (typing) _drawTypingBubble(canvas, cx, headTop);
+    final lift = typing ? 22.0 : 0.0;
+    for (final b in _bubbles) {
+      if (b.senderId != uid) continue;
+      final y = headTop - lift - b.age * _bubbleDrift;
+      _drawBubble(canvas, cx, y, b.name, b.text, _bubbleOpacity(b.age),
+          tail: b.age < 2.5 && !typing);
+    }
+  }
+
+  double _bubbleOpacity(double age) {
+    const fadeOut = _bubbleLife - 3;
+    if (age <= fadeOut) return 1;
+    return (1 - (age - fadeOut) / 3).clamp(0.0, 1.0);
+  }
+
+  /// Nuvoletta "Nome: testo". [yBottom] = base della nuvoletta (verso la testa).
+  void _drawBubble(Canvas canvas, double cx, double yBottom, String name,
+      String text, double op, {bool tail = false}) {
+    if (op <= 0) return;
+    final tp = painting.TextPainter(
+      text: painting.TextSpan(children: [
+        painting.TextSpan(
+            text: '$name ',
+            style: painting.TextStyle(
+                color: WevoColors.teal.withValues(alpha: op),
+                fontSize: 11,
+                fontWeight: FontWeight.w700)),
+        painting.TextSpan(
+            text: text,
+            style: painting.TextStyle(
+                color: const Color(0xFFFFFFFF).withValues(alpha: op),
+                fontSize: 11)),
+      ]),
+      textDirection: painting.TextDirection.ltr,
+      maxLines: 2,
+      ellipsis: '…',
+    )..layout(maxWidth: 150);
+    const padX = 8.0, padY = 5.0;
+    final w = tp.width + padX * 2;
+    final h = tp.height + padY * 2;
+    final rect = Rect.fromLTWH(cx - w / 2, yBottom - h, w, h);
+    final rr = RRect.fromRectAndRadius(rect, const Radius.circular(9));
+    canvas.drawRRect(
+        rr, Paint()..color = const Color(0xF01A1230).withValues(alpha: 0.94 * op));
+    canvas.drawRRect(
+        rr,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = WevoColors.teal.withValues(alpha: 0.5 * op));
+    if (tail) {
+      final path = Path()
+        ..moveTo(cx - 5, rect.bottom)
+        ..lineTo(cx + 5, rect.bottom)
+        ..lineTo(cx, rect.bottom + 6)
+        ..close();
+      canvas.drawPath(
+          path, Paint()..color = const Color(0xF01A1230).withValues(alpha: 0.94 * op));
+    }
+    tp.paint(canvas, Offset(rect.left + padX, rect.top + padY));
+  }
+
+  /// Nuvoletta "..." animata mentre qualcuno scrive.
+  void _drawTypingBubble(Canvas canvas, double cx, double yBottom) {
+    final dots = 1 + (_animT * 2).floor() % 3; // 1..3 ciclici
+    const w = 34.0, h = 20.0;
+    final rect = Rect.fromLTWH(cx - w / 2, yBottom - h, w, h);
+    final rr = RRect.fromRectAndRadius(rect, const Radius.circular(10));
+    canvas.drawRRect(rr, Paint()..color = const Color(0xE61A1230));
+    canvas.drawRRect(
+        rr,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = WevoColors.teal.withValues(alpha: 0.5));
+    final dotPaint = Paint()..color = const Color(0xFFFFFFFF);
+    for (var i = 0; i < 3; i++) {
+      final on = i < dots;
+      canvas.drawCircle(
+          Offset(rect.center.dx + (i - 1) * 8, rect.center.dy),
+          2.2,
+          on ? dotPaint : (Paint()..color = const Color(0x55FFFFFF)));
+    }
+    final path = Path()
+      ..moveTo(cx - 5, rect.bottom)
+      ..lineTo(cx + 5, rect.bottom)
+      ..lineTo(cx, rect.bottom + 6)
+      ..close();
+    canvas.drawPath(path, Paint()..color = const Color(0xE61A1230));
   }
 
   Path _diamond(Vector2 c) => Path()
@@ -894,6 +1054,15 @@ class IsoRoom extends PositionComponent
     );
     canvas.drawCircle(p.translate(0, -33), 8, _visitorHead);
   }
+}
+
+/// Una nuvoletta chat sopra un avatar (sale e sfuma con l'età).
+class _Bubble {
+  _Bubble(this.senderId, this.name, this.text);
+  final String senderId;
+  final String name;
+  final String text;
+  double age = 0;
 }
 
 /// Renderable ordinabile per occlusione isometrica (footprint + draw).
