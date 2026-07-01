@@ -187,27 +187,27 @@ class IsoRoom extends PositionComponent
   final Map<String, int> _visitorFacing = {};
   final Map<String, bool> _visitorWalking = {};
 
-  // Aspetto: skin ricolorate (felpa) in cache per colore. null = base.
-  int? _myHoodie;
-  final Map<int, AvatarSprites> _skinCache = {};
-  final Set<int> _skinBuilding = {};
+  // Aspetto: skin ricolorate (felpa, pelle) in cache per coppia colori.
+  (int?, int?) _myColors = (null, null); // (hoodie, skin)
+  final Map<(int?, int?), AvatarSprites> _skinCache = {};
+  final Set<(int?, int?)> _skinBuilding = {};
 
   void setMyFigure(AvatarFigure figure) {
-    _myHoodie = figure.hoodie;
-    _skinFor(_myHoodie); // pre-costruisce (best-effort)
+    _myColors = (figure.hoodie, figure.skin);
+    _skinFor(_myColors); // pre-costruisce (best-effort)
   }
 
-  /// Skin per un colore felpa: base se null/non pronta; ricolora async + cache.
-  AvatarSprites? _skinFor(int? hoodie) {
+  /// Skin per (felpa, pelle): base se nessun recolor/non pronta; ricolora async + cache.
+  AvatarSprites? _skinFor((int?, int?) colors) {
     final base = _sprites.avatar;
-    if (base == null || hoodie == null) return base;
-    final cached = _skinCache[hoodie];
+    if (base == null || (colors.$1 == null && colors.$2 == null)) return base;
+    final cached = _skinCache[colors];
     if (cached != null) return cached;
-    if (!_skinBuilding.contains(hoodie)) {
-      _skinBuilding.add(hoodie);
-      base.recolored(Color(hoodie)).then((s) {
-        _skinCache[hoodie] = s;
-        _skinBuilding.remove(hoodie);
+    if (!_skinBuilding.contains(colors)) {
+      _skinBuilding.add(colors);
+      base.recolored(hoodie: colors.$1, skin: colors.$2).then((s) {
+        _skinCache[colors] = s;
+        _skinBuilding.remove(colors);
       });
     }
     return base; // base finché la variante ricolorata non è pronta
@@ -633,19 +633,53 @@ class IsoRoom extends PositionComponent
   }
 
   void _renderObjects(Canvas canvas) {
-    // Profondità = bordo frontale della cella (+tileH/2), uguale per tutti →
-    // ordinamento coerente avatar/visitatori/mobili (niente overlap strani).
-    final renderables = <(double, void Function())>[
-      for (final item in _furniture)
-        (_furnitureBaseY(item), () => _drawFurniture(canvas, item)),
+    // 1) Mobili "piatti" (tappeti, h<=6) col pavimento: non occludono nessuno.
+    final flat = _furniture
+        .where((f) => furnitureDef(f.itemId).height <= 6)
+        .toList()
+      ..sort((a, b) => _furnitureBaseY(a).compareTo(_furnitureBaseY(b)));
+    for (final f in flat) {
+      _drawFurniture(canvas, f);
+    }
+
+    // 2) Mobili "alti" + personaggi: ordinati per **occlusione isometrica
+    //    corretta** (separating-axis sui footprint), non per singola cella →
+    //    gestisce i mobili lunghi (un personaggio davanti alla parte sinistra
+    //    di un letto 3x1 non viene più coperto).
+    final items = <_DepthItem>[
+      for (final f in _furniture)
+        if (furnitureDef(f.itemId).height > 6)
+          _DepthItem(_furnRect(f), () => _drawFurniture(canvas, f)),
       for (final v in _visitors)
-        (_visitorRenderPos(v).y + tileH / 2, () => _renderVisitor(canvas, v)),
-      (_avatarPos.y + tileH / 2, () => _renderAvatar(canvas)),
-    ]..sort((a, b) => a.$1.compareTo(b.$1));
-    for (final r in renderables) {
-      r.$2();
+        _DepthItem(_tileRect(_pixelToTile(_visitorRenderPos(v))),
+            () => _renderVisitor(canvas, v)),
+      _DepthItem(
+          _tileRect(_pixelToTile(_avatarPos)), () => _renderAvatar(canvas)),
+    ]..sort(_depthCompare);
+    for (final it in items) {
+      it.draw();
     }
   }
+
+  (int, int, int, int) _furnRect(RoomFurnitureItem item) {
+    final (w, h) = footprintWH(furnitureDef(item.itemId), item.rot);
+    return (item.x, item.y, item.x + w, item.y + h); // max esclusivo
+  }
+
+  (int, int, int, int) _tileRect((int, int) t) =>
+      (t.$1, t.$2, t.$1 + 1, t.$2 + 1);
+
+  /// a < b (a disegnato prima, "dietro") se a è interamente più indietro di b
+  /// su un asse della griglia. Footprint disgiunti in profondità → 0 (non si
+  /// occludono, l'ordine non conta).
+  int _depthCompare(_DepthItem a, _DepthItem b) {
+    if (_behind(a.rect, b.rect)) return -1;
+    if (_behind(b.rect, a.rect)) return 1;
+    return 0;
+  }
+
+  bool _behind((int, int, int, int) a, (int, int, int, int) b) =>
+      a.$3 <= b.$1 || a.$4 <= b.$2; // a.xmax<=b.xmin || a.ymax<=b.ymin
 
   Vector2 _visitorRenderPos(RoomVisitor v) =>
       _visitorPos[v.uid] ??
@@ -757,7 +791,7 @@ class IsoRoom extends PositionComponent
   }
 
   void _renderAvatar(Canvas canvas) {
-    if (_blitActor(canvas, _skinFor(_myHoodie), _avatarPos, _facing, _walking)) {
+    if (_blitActor(canvas, _skinFor(_myColors), _avatarPos, _facing, _walking)) {
       return;
     }
     final p = Offset(_avatarPos.x, _avatarPos.y);
@@ -794,8 +828,8 @@ class IsoRoom extends PositionComponent
   /// Altro visitatore alla sua cella (colore distinto).
   void _renderVisitor(Canvas canvas, RoomVisitor v) {
     final c = _visitorRenderPos(v);
-    if (_blitActor(canvas, _skinFor(v.hoodie), c, _visitorFacing[v.uid] ?? 2,
-        _visitorWalking[v.uid] ?? false)) {
+    if (_blitActor(canvas, _skinFor((v.hoodie, v.skin)), c,
+        _visitorFacing[v.uid] ?? 2, _visitorWalking[v.uid] ?? false)) {
       return;
     }
     final p = Offset(c.x, c.y);
@@ -813,4 +847,11 @@ class IsoRoom extends PositionComponent
     );
     canvas.drawCircle(p.translate(0, -33), 8, _visitorHead);
   }
+}
+
+/// Renderable ordinabile per occlusione isometrica (footprint + draw).
+class _DepthItem {
+  _DepthItem(this.rect, this.draw);
+  final (int, int, int, int) rect; // xmin, ymin, xmax, ymax (max esclusivo)
+  final void Function() draw;
 }

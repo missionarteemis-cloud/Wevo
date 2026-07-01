@@ -12,21 +12,30 @@ class AvatarFigure {
   /// Colore felpa (ARGB). `null` = colore originale dello sprite (teal).
   final int? hoodie;
 
-  const AvatarFigure({this.base = 'avatar_base', this.hoodie});
+  /// Tono pelle (ARGB). `null` = tono originale dello sprite.
+  final int? skin;
+
+  const AvatarFigure({this.base = 'avatar_base', this.hoodie, this.skin});
 
   static const AvatarFigure standard = AvatarFigure();
 
-  Color? get hoodieColor => hoodie == null ? null : Color(hoodie!);
-
-  AvatarFigure copyWith({String? base, int? hoodie, bool resetHoodie = false}) =>
+  AvatarFigure copyWith({
+    String? base,
+    int? hoodie,
+    int? skin,
+    bool resetHoodie = false,
+    bool resetSkin = false,
+  }) =>
       AvatarFigure(
         base: base ?? this.base,
         hoodie: resetHoodie ? null : (hoodie ?? this.hoodie),
+        skin: resetSkin ? null : (skin ?? this.skin),
       );
 
   Map<String, dynamic> toMap() => {
         'base': base,
         if (hoodie != null) 'hoodie': hoodie,
+        if (skin != null) 'skin': skin,
       };
 
   factory AvatarFigure.fromMap(Map<String, dynamic>? m) {
@@ -34,15 +43,19 @@ class AvatarFigure {
     return AvatarFigure(
       base: (m['base'] as String?) ?? 'avatar_base',
       hoodie: (m['hoodie'] as num?)?.toInt(),
+      skin: (m['skin'] as num?)?.toInt(),
     );
   }
 
   @override
   bool operator ==(Object other) =>
-      other is AvatarFigure && other.base == base && other.hoodie == hoodie;
+      other is AvatarFigure &&
+      other.base == base &&
+      other.hoodie == hoodie &&
+      other.skin == skin;
 
   @override
-  int get hashCode => Object.hash(base, hoodie);
+  int get hashCode => Object.hash(base, hoodie, skin);
 }
 
 /// Colori felpa selezionabili (recolor in-engine). `null` = originale.
@@ -55,4 +68,15 @@ const List<int?> kHoodiePresets = [
   0xFFFF8A3D, // arancio
   0xFFE5484D, // rosso
   0xFFFFC76A, // oro
+];
+
+/// Toni pelle selezionabili (recolor relativo). `null` = originale.
+const List<int?> kSkinPresets = [
+  null, // originale
+  0xFFF2C8A0, // chiara
+  0xFFE0A878, // media
+  0xFFC98A5B, // ambra
+  0xFF9B6440, // bruna
+  0xFF6E4329, // scura
+  0xFF4A2E1C, // molto scura
 ];

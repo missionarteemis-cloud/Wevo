@@ -66,22 +66,29 @@ class _RoomScreenState extends State<RoomScreen> {
     if (!mounted) return;
     setState(() => _figure = fig);
     _game.setMyFigure(fig);
-    PresenceService.instance.setMyHoodie(_targetOwner, fig.hoodie);
+    PresenceService.instance
+        .setMyAppearance(_targetOwner, hoodie: fig.hoodie, skin: fig.skin);
   }
 
-  /// Cambia il colore della felpa: aggiorna gioco, persiste, propaga ai visitatori.
-  void _setHoodie(int? hoodie) {
-    final fig = _figure.copyWith(hoodie: hoodie, resetHoodie: hoodie == null);
+  /// Applica un aspetto aggiornato: gioco, persistenza, propagazione visitatori.
+  void _applyFigure(AvatarFigure fig) {
     setState(() => _figure = fig);
     _game.setMyFigure(fig);
     UserService.saveFigure(fig);
-    PresenceService.instance.setMyHoodie(_targetOwner, hoodie);
+    PresenceService.instance
+        .setMyAppearance(_targetOwner, hoodie: fig.hoodie, skin: fig.skin);
   }
+
+  void _setHoodie(int? hoodie) => _applyFigure(
+      _figure.copyWith(hoodie: hoodie, resetHoodie: hoodie == null));
+
+  void _setSkin(int? skin) =>
+      _applyFigure(_figure.copyWith(skin: skin, resetSkin: skin == null));
 
   Future<void> _enterAndSubscribe() async {
     final myName = FirebaseAuth.instance.currentUser?.displayName ?? 'Ospite';
-    await PresenceService.instance
-        .enterRoom(_targetOwner, name: myName, hoodie: _figure.hoodie);
+    await PresenceService.instance.enterRoom(_targetOwner,
+        name: myName, hoodie: _figure.hoodie, skin: _figure.skin);
     _visitorsSub = PresenceService.instance
         .roomVisitors(_targetOwner)
         .listen((visitors) => _game.setVisitors(visitors));
@@ -190,22 +197,46 @@ class _RoomScreenState extends State<RoomScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Colore felpa',
+              const Text('Aspetto',
                   style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                       fontSize: 16)),
               const SizedBox(height: 16),
+              const Text('Felpa',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 10),
               Wrap(
                 spacing: 14,
                 runSpacing: 14,
                 children: [
                   for (final c in kHoodiePresets)
-                    _HoodieSwatch(
+                    _ColorSwatch(
                       color: c,
+                      fallback: WevoColors.teal,
                       selected: _figure.hoodie == c,
                       onTap: () {
                         _setHoodie(c);
+                        setSheet(() {});
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const Text('Pelle',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 14,
+                runSpacing: 14,
+                children: [
+                  for (final c in kSkinPresets)
+                    _ColorSwatch(
+                      color: c,
+                      fallback: const Color(0xFFDF8D5D),
+                      selected: _figure.skin == c,
+                      onTap: () {
+                        _setSkin(c);
                         setSheet(() {});
                       },
                     ),
@@ -286,7 +317,7 @@ class _RoomScreenState extends State<RoomScreen> {
           // Riquadro descrizione / pannello spostamento (basso destra)
           Positioned(
             right: 16,
-            bottom: 16,
+            bottom: 120, // sopra il dock (evita sovrapposizione su schermi stretti)
             child: AnimatedBuilder(
               animation: Listenable.merge([_game.selected, _game.moving]),
               builder: (_, __) {
@@ -659,17 +690,21 @@ class _EmotePick extends StatelessWidget {
   }
 }
 
-/// Pastiglia colore felpa nel pannello Aspetto. `color` null = originale.
-class _HoodieSwatch extends StatelessWidget {
+/// Pastiglia colore nel pannello Aspetto. `color` null = originale ([fallback]).
+class _ColorSwatch extends StatelessWidget {
   final int? color;
+  final Color fallback;
   final bool selected;
   final VoidCallback onTap;
-  const _HoodieSwatch(
-      {required this.color, required this.selected, required this.onTap});
+  const _ColorSwatch(
+      {required this.color,
+      required this.fallback,
+      required this.selected,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final c = color == null ? WevoColors.teal : Color(color!);
+    final c = color == null ? fallback : Color(color!);
     return GestureDetector(
       onTap: onTap,
       child: Container(

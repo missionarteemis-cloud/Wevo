@@ -137,12 +137,13 @@ class AvatarSprites {
     return (sprite: frames[f], flip: m.flip);
   }
 
-  /// Variante con la **felpa** ricolorata verso [hoodie]. Async: rigenera le
-  /// immagini una volta sola (il chiamante la mette in cache).
-  Future<AvatarSprites> recolored(ui.Color hoodie) async {
+  /// Variante ricolorata (felpa/pelle). Async: rigenera le immagini una volta
+  /// sola (il chiamante la mette in cache).
+  Future<AvatarSprites> recolored({int? hoodie, int? skin}) async {
     final out = <String, _AvatarAction>{};
     for (final e in _actions.entries) {
-      final img = await recolorHoodie(e.value.image, hoodie);
+      final img =
+          await recolorAvatar(e.value.image, hoodie: hoodie, skin: skin);
       out[e.key] =
           _AvatarAction(img, e.value.frames, e.value.rowStart, e.value.fps);
     }
