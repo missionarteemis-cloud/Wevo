@@ -196,12 +196,14 @@ class _RoomScreenState extends State<RoomScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: WevoColors.surface,
+      isScrollControlled: true, // può crescere e scrollare (niente overflow)
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 34),
+        builder: (ctx, setSheet) => SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+              20, 18, 20, 34 + MediaQuery.of(ctx).padding.bottom),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
