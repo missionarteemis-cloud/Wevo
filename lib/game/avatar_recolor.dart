@@ -92,6 +92,17 @@ Future<ui.Image> recolorAvatar(ui.Image src,
       px[i + 2] = (b * hb2).clamp(0.0, 255.0).toInt();
       continue;
     }
+    // Attenua i riflessi neon magenta/rosa/viola: sul default (teal) sono voluti,
+    // ma quando ricolori stonano. Solo qui (varianti ricolorate), non sul base.
+    final mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    final mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    if (b > g + 8 && r > g + 8 && mx - mn > 85) {
+      final l = 0.299 * r + 0.587 * g + 0.114 * b;
+      const k = 0.82; // quanto desaturare (0..1)
+      px[i] = (r * (1 - k) + l * k).clamp(0.0, 255.0).toInt();
+      px[i + 1] = (g * (1 - k) + l * k).clamp(0.0, 255.0).toInt();
+      px[i + 2] = (b * (1 - k) + l * k).clamp(0.0, 255.0).toInt();
+    }
   }
 
   final completer = Completer<ui.Image>();
