@@ -15,7 +15,12 @@ class AvatarFigure {
   /// Tono pelle (ARGB). `null` = tono originale dello sprite.
   final int? skin;
 
-  const AvatarFigure({this.base = 'avatar_base', this.hoodie, this.skin});
+  /// Colore capelli (ARGB). `null` = colore originale. Visibile solo sulle basi
+  /// con capelli scoperti (es. 'avatar_female').
+  final int? hair;
+
+  const AvatarFigure(
+      {this.base = 'avatar_base', this.hoodie, this.skin, this.hair});
 
   static const AvatarFigure standard = AvatarFigure();
 
@@ -23,19 +28,23 @@ class AvatarFigure {
     String? base,
     int? hoodie,
     int? skin,
+    int? hair,
     bool resetHoodie = false,
     bool resetSkin = false,
+    bool resetHair = false,
   }) =>
       AvatarFigure(
         base: base ?? this.base,
         hoodie: resetHoodie ? null : (hoodie ?? this.hoodie),
         skin: resetSkin ? null : (skin ?? this.skin),
+        hair: resetHair ? null : (hair ?? this.hair),
       );
 
   Map<String, dynamic> toMap() => {
         'base': base,
         if (hoodie != null) 'hoodie': hoodie,
         if (skin != null) 'skin': skin,
+        if (hair != null) 'hair': hair,
       };
 
   factory AvatarFigure.fromMap(Map<String, dynamic>? m) {
@@ -44,6 +53,7 @@ class AvatarFigure {
       base: (m['base'] as String?) ?? 'avatar_base',
       hoodie: (m['hoodie'] as num?)?.toInt(),
       skin: (m['skin'] as num?)?.toInt(),
+      hair: (m['hair'] as num?)?.toInt(),
     );
   }
 
@@ -52,10 +62,11 @@ class AvatarFigure {
       other is AvatarFigure &&
       other.base == base &&
       other.hoodie == hoodie &&
-      other.skin == skin;
+      other.skin == skin &&
+      other.hair == hair;
 
   @override
-  int get hashCode => Object.hash(base, hoodie, skin);
+  int get hashCode => Object.hash(base, hoodie, skin, hair);
 }
 
 /// Colori felpa selezionabili (recolor in-engine). `null` = originale.
@@ -79,4 +90,17 @@ const List<int?> kSkinPresets = [
   0xFF9B6440, // bruna
   0xFF6E4329, // scura
   0xFF4A2E1C, // molto scura
+];
+
+/// Colori capelli selezionabili (recolor relativo). `null` = originale.
+const List<int?> kHairPresets = [
+  null, // originale (castano)
+  0xFF2B2B30, // nero
+  0xFF5A3A28, // castano scuro
+  0xFFE8C878, // biondo
+  0xFFB5502E, // ramato
+  0xFFE5484D, // rosso
+  0xFFFF7FB0, // rosa
+  0xFF62A8FF, // blu
+  0xFFD8D8E0, // argento
 ];

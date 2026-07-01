@@ -15,9 +15,9 @@
 
   "avatar_female": {
     "type": "avatar",
-    "frameW": 116,
-    "frameH": 116,
-    "anchor": [58, 88],
+    "frameW": 120,
+    "frameH": 120,
+    "anchor": [60, 90],
     "directions": 8,
     "actions": {
       "idle": { "sheet": "sprites/avatar_female_idle.png", "frames": 1, "fps": 2 },

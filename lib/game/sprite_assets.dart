@@ -149,11 +149,11 @@ class AvatarSprites {
 
   /// Variante ricolorata (felpa/pelle). Async: rigenera le immagini una volta
   /// sola (il chiamante la mette in cache).
-  Future<AvatarSprites> recolored({int? hoodie, int? skin}) async {
+  Future<AvatarSprites> recolored({int? hoodie, int? skin, int? hair}) async {
     final out = <String, _AvatarAction>{};
     for (final e in _actions.entries) {
-      final img =
-          await recolorAvatar(e.value.image, hoodie: hoodie, skin: skin);
+      final img = await recolorAvatar(e.value.image,
+          hoodie: hoodie, skin: skin, hair: hair);
       out[e.key] =
           _AvatarAction(img, e.value.frames, e.value.rowStart, e.value.fps);
     }

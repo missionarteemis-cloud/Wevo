@@ -67,7 +67,7 @@ class _RoomScreenState extends State<RoomScreen> {
     setState(() => _figure = fig);
     _game.setMyFigure(fig);
     PresenceService.instance.setMyAppearance(_targetOwner,
-        hoodie: fig.hoodie, skin: fig.skin, base: fig.base);
+        hoodie: fig.hoodie, skin: fig.skin, hair: fig.hair, base: fig.base);
   }
 
   /// Applica un aspetto aggiornato: gioco, persistenza, propagazione visitatori.
@@ -76,7 +76,7 @@ class _RoomScreenState extends State<RoomScreen> {
     _game.setMyFigure(fig);
     UserService.saveFigure(fig);
     PresenceService.instance.setMyAppearance(_targetOwner,
-        hoodie: fig.hoodie, skin: fig.skin, base: fig.base);
+        hoodie: fig.hoodie, skin: fig.skin, hair: fig.hair, base: fig.base);
   }
 
   void _setHoodie(int? hoodie) => _applyFigure(
@@ -84,6 +84,9 @@ class _RoomScreenState extends State<RoomScreen> {
 
   void _setSkin(int? skin) =>
       _applyFigure(_figure.copyWith(skin: skin, resetSkin: skin == null));
+
+  void _setHair(int? hair) =>
+      _applyFigure(_figure.copyWith(hair: hair, resetHair: hair == null));
 
   void _setBase(String base) => _applyFigure(_figure.copyWith(base: base));
 
@@ -93,6 +96,7 @@ class _RoomScreenState extends State<RoomScreen> {
         name: myName,
         hoodie: _figure.hoodie,
         skin: _figure.skin,
+        hair: _figure.hair,
         base: _figure.base);
     _visitorsSub = PresenceService.instance
         .roomVisitors(_targetOwner)
@@ -272,6 +276,29 @@ class _RoomScreenState extends State<RoomScreen> {
                     ),
                 ],
               ),
+              // Capelli: solo sulle basi con capelli scoperti (es. Donna).
+              if (_figure.base == 'avatar_female') ...[
+                const SizedBox(height: 18),
+                const Text('Capelli',
+                    style: TextStyle(color: Colors.white54, fontSize: 12)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 14,
+                  children: [
+                    for (final c in kHairPresets)
+                      _ColorSwatch(
+                        color: c,
+                        fallback: const Color(0xFF96484A),
+                        selected: _figure.hair == c,
+                        onTap: () {
+                          _setHair(c);
+                          setSheet(() {});
+                        },
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

@@ -7,15 +7,17 @@ import 'dart:ui' as ui;
 /// generazioni**). Operazione una-tantum per combinazione colore (poi in cache).
 ///
 /// - **Felpa** (`hoodie`): scala per luminanza → colori vividi e prevedibili.
-/// - **Pelle** (`skin`): ricolorazione *relativa* al tono originale (`_skinSrc`)
-///   → può cambiare tinta **e** schiarirsi/scurirsi mantenendo l'ombreggiatura.
+/// - **Pelle** (`skin`): ricolorazione *relativa* al tono originale (`_skinSrc`).
+/// - **Capelli** (`hair`): relativa a `_hairSrc` (bruno). Distinta dalla pelle:
+///   la pelle ha g>b, i capelli g≈b.
 ///
-/// Maschere per dominanza di canale (niente maschere esterne): la felpa è
-/// verde-blu dominante; la pelle è calda (r>g>b) e luminosa.
-const _skinSrc = [223.0, 141.0, 93.0]; // tono pelle medio campionato dallo sprite
+/// Maschere per dominanza di canale (niente maschere esterne).
+const _skinSrc = [223.0, 141.0, 93.0]; // tono pelle medio campionato
+const _hairSrc = [150.0, 72.0, 68.0]; // bruno medio campionato
 
-Future<ui.Image> recolorAvatar(ui.Image src, {int? hoodie, int? skin}) async {
-  if (hoodie == null && skin == null) return src;
+Future<ui.Image> recolorAvatar(ui.Image src,
+    {int? hoodie, int? skin, int? hair}) async {
+  if (hoodie == null && skin == null && hair == null) return src;
   final w = src.width;
   final h = src.height;
   final data = await src.toByteData(format: ui.ImageByteFormat.rawRgba);
@@ -39,6 +41,14 @@ Future<ui.Image> recolorAvatar(ui.Image src, {int? hoodie, int? skin}) async {
     sg = (c.g * 255.0) / _skinSrc[1];
     sb = (c.b * 255.0) / _skinSrc[2];
   }
+  // Capelli: rapporto target/origine per canale (relativo).
+  double hr2 = 1, hg2 = 1, hb2 = 1;
+  if (hair != null) {
+    final c = ui.Color(hair);
+    hr2 = (c.r * 255.0) / _hairSrc[0];
+    hg2 = (c.g * 255.0) / _hairSrc[1];
+    hb2 = (c.b * 255.0) / _hairSrc[2];
+  }
 
   for (var i = 0; i < px.length; i += 4) {
     final r = px[i];
@@ -61,6 +71,16 @@ Future<ui.Image> recolorAvatar(ui.Image src, {int? hoodie, int? skin}) async {
       px[i] = (r * sr).clamp(0.0, 255.0).toInt();
       px[i + 1] = (g * sg).clamp(0.0, 255.0).toInt();
       px[i + 2] = (b * sb).clamp(0.0, 255.0).toInt();
+      continue;
+    }
+    if (hair != null &&
+        r > g + 10 &&
+        (g - b).abs() < 12 &&
+        r >= 45 &&
+        r < 180) {
+      px[i] = (r * hr2).clamp(0.0, 255.0).toInt();
+      px[i + 1] = (g * hg2).clamp(0.0, 255.0).toInt();
+      px[i + 2] = (b * hb2).clamp(0.0, 255.0).toInt();
       continue;
     }
   }

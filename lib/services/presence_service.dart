@@ -98,6 +98,7 @@ class PresenceService {
       int y = 3,
       int? hoodie,
       int? skin,
+      int? hair,
       String base = 'avatar_base'}) async {
     final uid = _uid;
     if (uid == null) return;
@@ -114,21 +115,21 @@ class PresenceService {
         'y': y,
         if (hoodie != null) 'hoodie': hoodie,
         if (skin != null) 'skin': skin,
+        if (hair != null) 'hair': hair,
         'base': base,
         'ts': ServerValue.timestamp,
       });
     } catch (_) {}
   }
 
-  /// Aggiorna l'aspetto (base/felpa/pelle) nel nodo roomPresence corrente.
+  /// Aggiorna l'aspetto (base/felpa/pelle/capelli) nel nodo roomPresence.
   Future<void> setMyAppearance(String ownerUid,
-      {int? hoodie, int? skin, String base = 'avatar_base'}) async {
+      {int? hoodie, int? skin, int? hair, String base = 'avatar_base'}) async {
     final uid = _uid;
     if (uid == null) return;
     try {
-      await _database
-          .ref('roomPresence/$ownerUid/$uid')
-          .update({'hoodie': hoodie, 'skin': skin, 'base': base});
+      await _database.ref('roomPresence/$ownerUid/$uid').update(
+          {'hoodie': hoodie, 'skin': skin, 'hair': hair, 'base': base});
     } catch (_) {}
   }
 
@@ -190,6 +191,7 @@ class RoomVisitor {
   final String? emote;
   final int? hoodie; // colore felpa (recolor), null = originale
   final int? skin; // tono pelle (recolor), null = originale
+  final int? hair; // colore capelli (recolor), null = originale
   final String base; // sprite set (es. 'avatar_base', 'avatar_female')
 
   const RoomVisitor({
@@ -200,6 +202,7 @@ class RoomVisitor {
     this.emote,
     this.hoodie,
     this.skin,
+    this.hair,
     this.base = 'avatar_base',
   });
 
@@ -212,6 +215,7 @@ class RoomVisitor {
         emote: d['emote'] as String?,
         hoodie: (d['hoodie'] as num?)?.toInt(),
         skin: (d['skin'] as num?)?.toInt(),
+        hair: (d['hair'] as num?)?.toInt(),
         base: (d['base'] as String?) ?? 'avatar_base',
       );
 }
