@@ -675,12 +675,17 @@ class IsoRoom extends PositionComponent
       (t.$1, t.$2, t.$1 + 1, t.$2 + 1);
 
   /// a < b (a disegnato prima, "dietro") se a è interamente più indietro di b
-  /// su un asse della griglia. Footprint disgiunti in profondità → 0 (non si
-  /// occludono, l'ordine non conta).
+  /// su un asse della griglia (regola d'occlusione robusta per mobili lunghi).
+  /// Per footprint in **diagonale** (nessuno separabile su un asse) si usa la
+  /// profondità dell'angolo frontale (xmax+ymax) → prospettiva coerente.
   int _depthCompare(_DepthItem a, _DepthItem b) {
-    if (_behind(a.rect, b.rect)) return -1;
-    if (_behind(b.rect, a.rect)) return 1;
-    return 0;
+    final ab = _behind(a.rect, b.rect);
+    final ba = _behind(b.rect, a.rect);
+    if (ab && !ba) return -1;
+    if (ba && !ab) return 1;
+    final da = a.rect.$3 + a.rect.$4;
+    final db = b.rect.$3 + b.rect.$4;
+    return da.compareTo(db);
   }
 
   bool _behind((int, int, int, int) a, (int, int, int, int) b) =>
