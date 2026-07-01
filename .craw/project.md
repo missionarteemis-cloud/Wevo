@@ -3,9 +3,9 @@
 ## Snapshot
 - Canonical repo: `~/Projects/Wevo`
 - Stack: Flutter app + Firebase (Auth, Firestore, Storage), web target already used for fast iteration.
-- Current phase: core social app stabilization before any game layer.
-- Product pillars: discovery, matches/chat, profile, settings.
-- Differentiator to plan later: personal rooms + lightweight social 2D layer.
+- Current phase: game layer built (iso rooms, presence/visitors, store/inventory, PixelLab avatar system with recolor-first cosmetics) on top of the stabilized social core. App is LIVE on Firebase Hosting for friend testing. See the 2026-07-01 section below.
+- Product pillars: discovery, matches/chat, profile, settings, + the 2D game layer (personal rooms).
+- Differentiator (now being built): personal isometric rooms, presence, customizable avatars.
 
 ## Commands
 - Install deps: `flutter pub get`
@@ -50,3 +50,32 @@
 - 2026-06-29 — Symptom: chat looked live but was partly powered by fallback/mock surfaces. Root cause: direct client writes plus fake data paths let UI appear healthy while backend truth was inconsistent. Fix: route sends through `sendChatMessage`, read previews/messages from Firestore, remove fake chat inboxes, and lock client writes in `firestore.rules`. Verify: real registered users can match and exchange messages, mock `m*` recipients only auto-reply `OK`, and no UI depends on `mockMatches/mockMessages`.
 - 2026-06-29 — Symptom: real matches inbox risked failing only after deploy/runtime. Root cause: missing composite index for `chats(users arrayContains, lastMessageAt desc)`. Fix: commit `firestore.indexes.json`, wire it in `firebase.json`, deploy index to `wevo-22275`. Verify: chat previews load ordered by latest message without Firestore index errors.
 - 2026-06-29 — Symptom: end-to-end web integration checks remain flaky even after app-side chat stabilization. Root cause: current web integration harness/device path hangs on `web-server` in this environment, separate from the chat implementation itself. Fix: treat the harness as the blocker, not the product flow; keep using focused analyze/build plus real Firebase validation until the harness is repaired. Verify: app builds and focused analyzes pass, while the integration runner stall reproduces independently of chat feature changes.
+
+## 2026-07-01 — Game layer + avatar system + live web deploy (frontend by Claude)
+
+Phase has moved on: the **game layer is built** and the app is **deployed publicly** for friend testing. Diego works with Claude (Anthropic) on frontend/graphics + strategy, with Craw on backend; but Craw can now also make requested changes AND deploy.
+
+**LIVE URL: https://wevo-22275.web.app** (Firebase Hosting).
+
+### Deploy / Hosting (manual — this is the canonical publish path)
+- Hosting is configured in `firebase.json` (`hosting.public = build/web`, SPA rewrite) + `.firebaserc` (default project `wevo-22275`). Firebase CLI logged in as `missionarteemis@gmail.com`.
+- To publish changes: `flutter build web --release && firebase deploy --only hosting`.
+- **`git push` does NOT deploy.** Push = source to GitHub; the live URL only updates on `firebase deploy`. (Auto-deploy via GitHub Actions was discussed but intentionally NOT set up yet — Diego wants manual control of when things go live.)
+- Auth: `wevo-22275.web.app` is an auto-authorized Auth domain → registration/login work in prod. Functions (us-central1), RTDB (europe-west1), Storage all work from the hosted app.
+
+### Game layer (branch merged to master; `docs/game-layer.md` canonical)
+- Isometric room in **Flame** embedded via `GameWidget` (`lib/game/room_game.dart`, `lib/screens/room_screen.dart`), 7×7 grid (tile 64×32). Real furniture from `rooms/{ownerUid}`; multi-cell footprints, rotation, silhouette hit-test, BFS pathfinding, Move/Rotate ghost preview.
+- Store→inventory→place→take loop, **server-authoritative** via Cloud Functions (`buyItem`/`placeItem`/`takeItem`). Each new callable needs `allUsers` run.invoker after deploy.
+- **Presence/visitors** via RTDB (`presence`, `roomPresence`): green dot online, enter friend's room, see others move live (client interpolation). `lib/services/presence_service.dart`.
+- **Depth**: painter order is now a **topological sort by separating-axis occlusion** (`_depthSorted` in room_game.dart) so long/diagonal furniture don't mis-overlap; flat rugs (height≤6) render with the floor.
+
+### Avatar system (recolor-first) — `docs/art-spec.md`
+- Sprites generated with **PixelLab.ai** (Diego's account). Pipeline: `assets/images/sprites/manifest.json` + sheets; `lib/game/sprite_assets.dart` loads them, `IsoRoom` picks sprite-or-geometric-fallback. Iso 2:1, avatar 8 directions, low-top-down.
+- Two base skins in the manifest: **`avatar_base`** (male, hood up, 116×116) and **`avatar_female`** (female, NO hood, long hair, 120×120). Walk = 4 frames × 8 dir (S/SE/E/NE generated, NW/SW/W via PixelLab native mirror, N generated), composed into sheets in engine dir order (0 SE,1 S,2 SW,3 W,4 NW,5 N,6 NE,7 E).
+- **Cosmetics = recolor-first (free, in-engine)** because PixelLab "States" cost 20-40 generations each (too pricey for a catalog). `lib/game/avatar_recolor.dart` recolors hoodie (luminance ramp) + skin (relative) + hair (relative, only on hair-visible bases) via per-channel masks. `AvatarFigure` (`lib/models/avatar_figure.dart`) = structured look {base, hoodie, skin, hair}, persisted on `users/{uid}.figure` (server-authoritative, `coins` unchanged rule allows it), propagated to visitors via RTDB roomPresence (base/hoodie/skin/hair). UI: room dock "Aspetto" (Uomo/Donna + colore Felpa/Pelle/Capelli), scrollable sheet.
+- Future avatar ideas (not done): hood on/off toggle = needs both hood-up and hood-down variants per gender (more generations); overlay accessories (hats) to test; cosmetics as catalog/inventory items (economy).
+
+### Working rules (unchanged, reinforced)
+- **Diego tests everything by hand** (permanent pillar). For sprite/asset changes he does a FULL restart (q + `flutter run`), not hot reload.
+- Commit only confirmed work; **push only after Diego confirms**. Service-account key stays OUTSIDE the repo (`~/.config/wevo/serviceAccount.json`), never committed/echoed.
+- After changing avatar art: re-export from PixelLab, recompose sheets with ImageMagick in engine dir order, update `manifest.json` frame size/anchor, restart.
