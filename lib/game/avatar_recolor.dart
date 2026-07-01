@@ -67,19 +67,26 @@ Future<ui.Image> recolorAvatar(ui.Image src,
       px[i + 2] = (hb * s).clamp(0.0, 255.0).toInt();
       continue;
     }
-    if (skin != null && r > g + 14 && g > b + 10 && r > 110 && b < 190) {
+    // Pelle = caldo "morbido" (r/g moderato): esclude i rossi saturi dei capelli.
+    if (skin != null &&
+        r > g + 14 &&
+        g > b + 10 &&
+        r > 110 &&
+        b < 190 &&
+        r < g * 1.55) {
       px[i] = (r * sr).clamp(0.0, 255.0).toInt();
       px[i + 1] = (g * sg).clamp(0.0, 255.0).toInt();
       px[i + 2] = (b * sb).clamp(0.0, 255.0).toInt();
       continue;
     }
-    // Capelli = rosso dominante (caldo) e scuri (esclude la pelle chiara).
+    // Capelli = rosso dominante e (scuri OPPURE rosso saturo): così anche il
+    // riflesso caldo dei capelli segue il colore capelli, non la pelle.
     if (hair != null &&
         r > g &&
         r >= b &&
         r > 30 &&
-        r < 175 &&
-        0.299 * r + 0.587 * g + 0.114 * b < 117) {
+        r < 210 &&
+        (0.299 * r + 0.587 * g + 0.114 * b < 117 || r > g * 1.55)) {
       px[i] = (r * hr2).clamp(0.0, 255.0).toInt();
       px[i + 1] = (g * hg2).clamp(0.0, 255.0).toInt();
       px[i + 2] = (b * hb2).clamp(0.0, 255.0).toInt();
