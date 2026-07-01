@@ -1,1 +1,50 @@
-{"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"database":{"rules":"database.rules.json"},"functions":[{"source":"functions","codebase":"default"}],"flutter":{"platforms":{"android":{"default":{"projectId":"wevo-22275","appId":"1:800541292018:android:405e5068a02134433d676b","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"wevo-22275","configurations":{"android":"1:800541292018:android:405e5068a02134433d676b","ios":"1:800541292018:ios:5601ea3c3152d2ac3d676b","web":"1:800541292018:web:b384c72504d28e033d676b"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "database": {
+    "rules": "database.rules.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default"
+    }
+  ],
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "wevo-22275",
+          "appId": "1:800541292018:android:405e5068a02134433d676b",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "wevo-22275",
+          "configurations": {
+            "android": "1:800541292018:android:405e5068a02134433d676b",
+            "ios": "1:800541292018:ios:5601ea3c3152d2ac3d676b",
+            "web": "1:800541292018:web:b384c72504d28e033d676b"
+          }
+        }
+      }
+    }
+  }
+}
