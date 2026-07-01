@@ -43,3 +43,6 @@ Thumbs.db
 service-account*.json
 *.serviceaccount.json
 secrets/
+
+# Firebase deploy cache
+.firebase/
