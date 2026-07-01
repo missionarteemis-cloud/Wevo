@@ -663,10 +663,55 @@ class IsoRoom extends PositionComponent
             () => _renderVisitor(canvas, v)),
       _DepthItem(
           _tileRect(_pixelToTile(_avatarPos)), () => _renderAvatar(canvas)),
-    ]..sort(_depthCompare);
-    for (final it in items) {
+    ];
+    for (final it in _depthSorted(items)) {
       it.draw();
     }
+  }
+
+  /// Ordinamento topologico per occlusione isometrica: rispetta **tutti** i
+  /// vincoli "a è dietro b" (separating-axis) — gestisce anche gli angolini tra
+  /// mobili adiacenti. A parità, ordina per profondità dell'angolo frontale.
+  List<_DepthItem> _depthSorted(List<_DepthItem> items) {
+    final n = items.length;
+    final after = List.generate(n, (_) => <int>[]); // after[i]: j dopo i
+    final indeg = List<int>.filled(n, 0); // predecessori non ancora piazzati
+    for (var i = 0; i < n; i++) {
+      for (var j = i + 1; j < n; j++) {
+        final iB = _behind(items[i].rect, items[j].rect);
+        final jB = _behind(items[j].rect, items[i].rect);
+        if (iB && !jB) {
+          after[i].add(j);
+          indeg[j]++;
+        } else if (jB && !iB) {
+          after[j].add(i);
+          indeg[i]++;
+        }
+      }
+    }
+    int depth(int k) => items[k].rect.$3 + items[k].rect.$4; // xmax+ymax
+    final out = <_DepthItem>[];
+    final done = List<bool>.filled(n, false);
+    for (var placed = 0; placed < n; placed++) {
+      var best = -1;
+      for (var i = 0; i < n; i++) {
+        if (done[i] || indeg[i] != 0) continue;
+        if (best == -1 || depth(i) < depth(best)) best = i;
+      }
+      if (best == -1) {
+        // ciclo residuo (raro): sblocca col più indietro tra i rimasti.
+        for (var i = 0; i < n; i++) {
+          if (done[i]) continue;
+          if (best == -1 || depth(i) < depth(best)) best = i;
+        }
+      }
+      done[best] = true;
+      out.add(items[best]);
+      for (final j in after[best]) {
+        indeg[j]--;
+      }
+    }
+    return out;
   }
 
   (int, int, int, int) _furnRect(RoomFurnitureItem item) {
@@ -677,20 +722,8 @@ class IsoRoom extends PositionComponent
   (int, int, int, int) _tileRect((int, int) t) =>
       (t.$1, t.$2, t.$1 + 1, t.$2 + 1);
 
-  /// a < b (a disegnato prima, "dietro") se a è interamente più indietro di b
-  /// su un asse della griglia (regola d'occlusione robusta per mobili lunghi).
-  /// Per footprint in **diagonale** (nessuno separabile su un asse) si usa la
-  /// profondità dell'angolo frontale (xmax+ymax) → prospettiva coerente.
-  int _depthCompare(_DepthItem a, _DepthItem b) {
-    final ab = _behind(a.rect, b.rect);
-    final ba = _behind(b.rect, a.rect);
-    if (ab && !ba) return -1;
-    if (ba && !ab) return 1;
-    final da = a.rect.$3 + a.rect.$4;
-    final db = b.rect.$3 + b.rect.$4;
-    return da.compareTo(db);
-  }
-
+  /// a "dietro" b se interamente più indietro di b su un asse della griglia
+  /// (regola d'occlusione separating-axis).
   bool _behind((int, int, int, int) a, (int, int, int, int) b) =>
       a.$3 <= b.$1 || a.$4 <= b.$2; // a.xmax<=b.xmin || a.ymax<=b.ymin
 

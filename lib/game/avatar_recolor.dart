@@ -13,7 +13,7 @@ import 'dart:ui' as ui;
 ///
 /// Maschere per dominanza di canale (niente maschere esterne).
 const _skinSrc = [223.0, 141.0, 93.0]; // tono pelle medio campionato
-const _hairSrc = [150.0, 72.0, 68.0]; // bruno medio campionato
+const _hairSrc = [120.0, 60.0, 56.0]; // bruno medio campionato
 
 Future<ui.Image> recolorAvatar(ui.Image src,
     {int? hoodie, int? skin, int? hair}) async {
@@ -73,11 +73,13 @@ Future<ui.Image> recolorAvatar(ui.Image src,
       px[i + 2] = (b * sb).clamp(0.0, 255.0).toInt();
       continue;
     }
+    // Capelli = rosso dominante (caldo) e scuri (esclude la pelle chiara).
     if (hair != null &&
-        r > g + 10 &&
-        (g - b).abs() < 12 &&
-        r >= 45 &&
-        r < 180) {
+        r > g &&
+        r >= b &&
+        r > 30 &&
+        r < 175 &&
+        0.299 * r + 0.587 * g + 0.114 * b < 117) {
       px[i] = (r * hr2).clamp(0.0, 255.0).toInt();
       px[i + 1] = (g * hg2).clamp(0.0, 255.0).toInt();
       px[i + 2] = (b * hb2).clamp(0.0, 255.0).toInt();

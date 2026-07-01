@@ -1,5 +1,3 @@
-import 'dart:ui' show Color;
-
 /// Aspetto di un avatar (vedi docs/art-spec.md / strategia "recolor-first").
 ///
 /// Dati strutturati, persistiti su `users/{uid}.figure` e propagati ai
