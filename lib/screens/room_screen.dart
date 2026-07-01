@@ -66,8 +66,8 @@ class _RoomScreenState extends State<RoomScreen> {
     if (!mounted) return;
     setState(() => _figure = fig);
     _game.setMyFigure(fig);
-    PresenceService.instance
-        .setMyAppearance(_targetOwner, hoodie: fig.hoodie, skin: fig.skin);
+    PresenceService.instance.setMyAppearance(_targetOwner,
+        hoodie: fig.hoodie, skin: fig.skin, base: fig.base);
   }
 
   /// Applica un aspetto aggiornato: gioco, persistenza, propagazione visitatori.
@@ -75,8 +75,8 @@ class _RoomScreenState extends State<RoomScreen> {
     setState(() => _figure = fig);
     _game.setMyFigure(fig);
     UserService.saveFigure(fig);
-    PresenceService.instance
-        .setMyAppearance(_targetOwner, hoodie: fig.hoodie, skin: fig.skin);
+    PresenceService.instance.setMyAppearance(_targetOwner,
+        hoodie: fig.hoodie, skin: fig.skin, base: fig.base);
   }
 
   void _setHoodie(int? hoodie) => _applyFigure(
@@ -85,10 +85,15 @@ class _RoomScreenState extends State<RoomScreen> {
   void _setSkin(int? skin) =>
       _applyFigure(_figure.copyWith(skin: skin, resetSkin: skin == null));
 
+  void _setBase(String base) => _applyFigure(_figure.copyWith(base: base));
+
   Future<void> _enterAndSubscribe() async {
     final myName = FirebaseAuth.instance.currentUser?.displayName ?? 'Ospite';
     await PresenceService.instance.enterRoom(_targetOwner,
-        name: myName, hoodie: _figure.hoodie, skin: _figure.skin);
+        name: myName,
+        hoodie: _figure.hoodie,
+        skin: _figure.skin,
+        base: _figure.base);
     _visitorsSub = PresenceService.instance
         .roomVisitors(_targetOwner)
         .listen((visitors) => _game.setVisitors(visitors));
@@ -203,6 +208,31 @@ class _RoomScreenState extends State<RoomScreen> {
                       fontWeight: FontWeight.w700,
                       fontSize: 16)),
               const SizedBox(height: 16),
+              const Text('Personaggio',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _BaseChip(
+                    label: 'Uomo',
+                    selected: _figure.base == 'avatar_base',
+                    onTap: () {
+                      _setBase('avatar_base');
+                      setSheet(() {});
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  _BaseChip(
+                    label: 'Donna',
+                    selected: _figure.base == 'avatar_female',
+                    onTap: () {
+                      _setBase('avatar_female');
+                      setSheet(() {});
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
               const Text('Felpa',
                   style: TextStyle(color: Colors.white54, fontSize: 12)),
               const SizedBox(height: 10),
@@ -685,6 +715,40 @@ class _EmotePick extends StatelessWidget {
           const SizedBox(height: 8),
           Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w700)),
         ],
+      ),
+    );
+  }
+}
+
+/// Chip di scelta base personaggio (Uomo/Donna) nel pannello Aspetto.
+class _BaseChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _BaseChip(
+      {required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: selected
+              ? WevoColors.teal.withValues(alpha: 0.22)
+              : Colors.white.withValues(alpha: 0.05),
+          border: Border.all(
+            color: selected ? WevoColors.teal : Colors.white24,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                color: selected ? Colors.white : Colors.white70,
+                fontWeight: FontWeight.w700,
+                fontSize: 13)),
       ),
     );
   }

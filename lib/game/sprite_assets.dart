@@ -17,13 +17,23 @@ import 'avatar_recolor.dart';
 const String _manifestPath = 'assets/images/sprites/manifest.json';
 
 class RoomSprites {
-  RoomSprites._({this.avatar, Map<String, FurnitureSprite>? furniture})
-      : furniture = furniture ?? const {};
+  RoomSprites._(
+      {Map<String, AvatarSprites>? avatars,
+      Map<String, FurnitureSprite>? furniture})
+      : avatars = avatars ?? const {},
+        furniture = furniture ?? const {};
 
-  final AvatarSprites? avatar;
+  final Map<String, AvatarSprites> avatars; // base id (es. 'avatar_base') -> sprite
   final Map<String, FurnitureSprite> furniture;
 
-  bool get hasAvatar => avatar != null;
+  bool get hasAvatar => avatars.isNotEmpty;
+
+  /// Sprite per una base ([AvatarFigure.base]); fallback a 'avatar_base' o al primo.
+  AvatarSprites? avatarFor(String base) =>
+      avatars[base] ??
+      avatars['avatar_base'] ??
+      (avatars.isEmpty ? null : avatars.values.first);
+
   FurnitureSprite? furnitureSprite(String key) => furniture[key];
 
   static RoomSprites empty() => RoomSprites._();
@@ -40,7 +50,7 @@ class RoomSprites {
     }
     try {
       final map = json.decode(raw) as Map<String, dynamic>;
-      AvatarSprites? avatar;
+      final avatars = <String, AvatarSprites>{};
       final furniture = <String, FurnitureSprite>{};
       for (final entry in map.entries) {
         final value = entry.value;
@@ -49,7 +59,7 @@ class RoomSprites {
         try {
           switch (cfg['type'] as String?) {
             case 'avatar':
-              avatar = await AvatarSprites._load(images, cfg);
+              avatars[entry.key] = await AvatarSprites._load(images, cfg);
             case 'furniture':
               furniture[entry.key] = await FurnitureSprite._load(images, cfg);
           }
@@ -58,7 +68,7 @@ class RoomSprites {
           debugPrint('RoomSprites: skip "${entry.key}" ($e)');
         }
       }
-      return RoomSprites._(avatar: avatar, furniture: furniture);
+      return RoomSprites._(avatars: avatars, furniture: furniture);
     } catch (e) {
       debugPrint('RoomSprites: manifest illeggibile ($e) → fallback');
       return empty();

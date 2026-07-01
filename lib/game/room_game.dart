@@ -187,30 +187,35 @@ class IsoRoom extends PositionComponent
   final Map<String, int> _visitorFacing = {};
   final Map<String, bool> _visitorWalking = {};
 
-  // Aspetto: skin ricolorate (felpa, pelle) in cache per coppia colori.
+  // Aspetto: skin per (base, felpa, pelle) in cache.
+  String _myBase = 'avatar_base';
   (int?, int?) _myColors = (null, null); // (hoodie, skin)
-  final Map<(int?, int?), AvatarSprites> _skinCache = {};
-  final Set<(int?, int?)> _skinBuilding = {};
+  final Map<(String, int?, int?), AvatarSprites> _skinCache = {};
+  final Set<(String, int?, int?)> _skinBuilding = {};
 
   void setMyFigure(AvatarFigure figure) {
+    _myBase = figure.base;
     _myColors = (figure.hoodie, figure.skin);
-    _skinFor(_myColors); // pre-costruisce (best-effort)
+    _skinFor(_myBase, _myColors); // pre-costruisce (best-effort)
   }
 
-  /// Skin per (felpa, pelle): base se nessun recolor/non pronta; ricolora async + cache.
-  AvatarSprites? _skinFor((int?, int?) colors) {
-    final base = _sprites.avatar;
-    if (base == null || (colors.$1 == null && colors.$2 == null)) return base;
-    final cached = _skinCache[colors];
+  /// Skin per (base, felpa, pelle): base se nessun recolor/non pronta; ricolora async + cache.
+  AvatarSprites? _skinFor(String base, (int?, int?) colors) {
+    final baseSprites = _sprites.avatarFor(base);
+    if (baseSprites == null || (colors.$1 == null && colors.$2 == null)) {
+      return baseSprites;
+    }
+    final key = (base, colors.$1, colors.$2);
+    final cached = _skinCache[key];
     if (cached != null) return cached;
-    if (!_skinBuilding.contains(colors)) {
-      _skinBuilding.add(colors);
-      base.recolored(hoodie: colors.$1, skin: colors.$2).then((s) {
-        _skinCache[colors] = s;
-        _skinBuilding.remove(colors);
+    if (!_skinBuilding.contains(key)) {
+      _skinBuilding.add(key);
+      baseSprites.recolored(hoodie: colors.$1, skin: colors.$2).then((s) {
+        _skinCache[key] = s;
+        _skinBuilding.remove(key);
       });
     }
-    return base; // base finché la variante ricolorata non è pronta
+    return baseSprites; // base finché la variante ricolorata non è pronta
   }
 
   @override
@@ -791,7 +796,8 @@ class IsoRoom extends PositionComponent
   }
 
   void _renderAvatar(Canvas canvas) {
-    if (_blitActor(canvas, _skinFor(_myColors), _avatarPos, _facing, _walking)) {
+    if (_blitActor(
+        canvas, _skinFor(_myBase, _myColors), _avatarPos, _facing, _walking)) {
       return;
     }
     final p = Offset(_avatarPos.x, _avatarPos.y);
@@ -828,7 +834,7 @@ class IsoRoom extends PositionComponent
   /// Altro visitatore alla sua cella (colore distinto).
   void _renderVisitor(Canvas canvas, RoomVisitor v) {
     final c = _visitorRenderPos(v);
-    if (_blitActor(canvas, _skinFor((v.hoodie, v.skin)), c,
+    if (_blitActor(canvas, _skinFor(v.base, (v.hoodie, v.skin)), c,
         _visitorFacing[v.uid] ?? 2, _visitorWalking[v.uid] ?? false)) {
       return;
     }

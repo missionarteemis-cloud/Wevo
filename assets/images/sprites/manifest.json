@@ -13,6 +13,18 @@
     }
   },
 
+  "avatar_female": {
+    "type": "avatar",
+    "frameW": 116,
+    "frameH": 116,
+    "anchor": [58, 88],
+    "directions": 8,
+    "actions": {
+      "idle": { "sheet": "sprites/avatar_female_idle.png", "frames": 1, "fps": 2 },
+      "walk": { "sheet": "sprites/avatar_female_walk.png", "frames": 4, "fps": 8 }
+    }
+  },
+
   "sofa_neon_2x1":  { "type": "furniture", "sheet": "sprites/sofa_neon_2x1.png",  "anchor": [64, 80] },
   "table_low_2x2":  { "type": "furniture", "sheet": "sprites/table_low_2x2.png",  "anchor": [64, 96] },
   "lamp_pillar_1x1":{ "type": "furniture", "sheet": "sprites/lamp_pillar_1x1.png","anchor": [32, 64] },

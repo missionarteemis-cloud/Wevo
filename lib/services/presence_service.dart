@@ -97,7 +97,8 @@ class PresenceService {
       int x = 3,
       int y = 3,
       int? hoodie,
-      int? skin}) async {
+      int? skin,
+      String base = 'avatar_base'}) async {
     final uid = _uid;
     if (uid == null) return;
     try {
@@ -113,20 +114,21 @@ class PresenceService {
         'y': y,
         if (hoodie != null) 'hoodie': hoodie,
         if (skin != null) 'skin': skin,
+        'base': base,
         'ts': ServerValue.timestamp,
       });
     } catch (_) {}
   }
 
-  /// Aggiorna l'aspetto (felpa/pelle) nel nodo roomPresence corrente.
+  /// Aggiorna l'aspetto (base/felpa/pelle) nel nodo roomPresence corrente.
   Future<void> setMyAppearance(String ownerUid,
-      {int? hoodie, int? skin}) async {
+      {int? hoodie, int? skin, String base = 'avatar_base'}) async {
     final uid = _uid;
     if (uid == null) return;
     try {
       await _database
           .ref('roomPresence/$ownerUid/$uid')
-          .update({'hoodie': hoodie, 'skin': skin});
+          .update({'hoodie': hoodie, 'skin': skin, 'base': base});
     } catch (_) {}
   }
 
@@ -188,6 +190,7 @@ class RoomVisitor {
   final String? emote;
   final int? hoodie; // colore felpa (recolor), null = originale
   final int? skin; // tono pelle (recolor), null = originale
+  final String base; // sprite set (es. 'avatar_base', 'avatar_female')
 
   const RoomVisitor({
     required this.uid,
@@ -197,6 +200,7 @@ class RoomVisitor {
     this.emote,
     this.hoodie,
     this.skin,
+    this.base = 'avatar_base',
   });
 
   factory RoomVisitor.fromMap(String uid, Map<String, dynamic> d) =>
@@ -208,5 +212,6 @@ class RoomVisitor {
         emote: d['emote'] as String?,
         hoodie: (d['hoodie'] as num?)?.toInt(),
         skin: (d['skin'] as num?)?.toInt(),
+        base: (d['base'] as String?) ?? 'avatar_base',
       );
 }
