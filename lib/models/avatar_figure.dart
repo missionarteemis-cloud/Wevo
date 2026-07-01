@@ -67,6 +67,12 @@ class AvatarFigure {
   int get hashCode => Object.hash(base, hoodie, skin, hair);
 }
 
+/// Skin base disponibili: (id nel manifest, asset miniatura per la card).
+const List<(String, String)> kAvatarSkins = [
+  ('avatar_base', 'assets/images/sprites/avatar_base_thumb.png'),
+  ('avatar_female', 'assets/images/sprites/avatar_female_thumb.png'),
+];
+
 /// Colori felpa selezionabili (recolor in-engine). `null` = originale.
 const List<int?> kHoodiePresets = [
   null, // originale (teal dello sprite)

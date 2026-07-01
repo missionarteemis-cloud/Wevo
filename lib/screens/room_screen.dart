@@ -262,23 +262,18 @@ class _RoomScreenState extends State<RoomScreen> {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  _BaseChip(
-                    label: 'Uomo',
-                    selected: _figure.base == 'avatar_base',
-                    onTap: () {
-                      _setBase('avatar_base');
-                      setSheet(() {});
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  _BaseChip(
-                    label: 'Donna',
-                    selected: _figure.base == 'avatar_female',
-                    onTap: () {
-                      _setBase('avatar_female');
-                      setSheet(() {});
-                    },
-                  ),
+                  for (final s in kAvatarSkins)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: _SkinCard(
+                        thumb: s.$2,
+                        selected: _figure.base == s.$1,
+                        onTap: () {
+                          _setBase(s.$1);
+                          setSheet(() {});
+                        },
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 18),
@@ -321,29 +316,27 @@ class _RoomScreenState extends State<RoomScreen> {
                     ),
                 ],
               ),
-              // Capelli: solo sulle basi con capelli scoperti (es. Donna).
-              if (_figure.base == 'avatar_female') ...[
-                const SizedBox(height: 18),
-                const Text('Capelli',
-                    style: TextStyle(color: Colors.white54, fontSize: 12)),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 14,
-                  runSpacing: 14,
-                  children: [
-                    for (final c in kHairPresets)
-                      _ColorSwatch(
-                        color: c,
-                        fallback: const Color(0xFF96484A),
-                        selected: _figure.hair == c,
-                        onTap: () {
-                          _setHair(c);
-                          setSheet(() {});
-                        },
-                      ),
-                  ],
-                ),
-              ],
+              // Capelli (entrambe le skin hanno capelli scoperti).
+              const SizedBox(height: 18),
+              const Text('Capelli',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 14,
+                runSpacing: 14,
+                children: [
+                  for (final c in kHairPresets)
+                    _ColorSwatch(
+                      color: c,
+                      fallback: const Color(0xFF96484A),
+                      selected: _figure.hair == c,
+                      onTap: () {
+                        _setHair(c);
+                        setSheet(() {});
+                      },
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -828,35 +821,40 @@ class _EmotePick extends StatelessWidget {
   }
 }
 
-/// Chip di scelta base personaggio (Uomo/Donna) nel pannello Aspetto.
-class _BaseChip extends StatelessWidget {
-  final String label;
+/// Card di scelta skin: rettangolo verticale con la miniatura del look.
+class _SkinCard extends StatelessWidget {
+  final String thumb;
   final bool selected;
   final VoidCallback onTap;
-  const _BaseChip(
-      {required this.label, required this.selected, required this.onTap});
+  const _SkinCard(
+      {required this.thumb, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        width: 64,
+        height: 92,
+        padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           color: selected
-              ? WevoColors.teal.withValues(alpha: 0.22)
+              ? WevoColors.teal.withValues(alpha: 0.18)
               : Colors.white.withValues(alpha: 0.05),
           border: Border.all(
             color: selected ? WevoColors.teal : Colors.white24,
-            width: selected ? 2 : 1,
+            width: selected ? 2.5 : 1,
           ),
+          boxShadow: selected
+              ? [BoxShadow(color: WevoColors.teal.withValues(alpha: 0.4), blurRadius: 10)]
+              : null,
         ),
-        child: Text(label,
-            style: TextStyle(
-                color: selected ? Colors.white : Colors.white70,
-                fontWeight: FontWeight.w700,
-                fontSize: 13)),
+        child: Image.asset(
+          thumb,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.none, // pixel-art netta
+        ),
       ),
     );
   }

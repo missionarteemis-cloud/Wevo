@@ -3,9 +3,9 @@
 
   "avatar_base": {
     "type": "avatar",
-    "frameW": 116,
-    "frameH": 116,
-    "anchor": [58, 88],
+    "frameW": 124,
+    "frameH": 124,
+    "anchor": [60, 92],
     "directions": 8,
     "actions": {
       "idle": { "sheet": "sprites/avatar_idle.png", "frames": 1, "fps": 2 },
