@@ -89,6 +89,12 @@ const Map<String, FurnitureDef> furnitureCatalog = {
     height: 44,
     color: WevoColors.sage,
   ),
+  'kookino_1x1': FurnitureDef(
+    name: 'Kookino',
+    description: 'Un furno 1×1 piccolo e kookino.',
+    height: 34,
+    color: WevoColors.coral,
+  ),
 };
 
 FurnitureDef furnitureDef(String itemId) => furnitureCatalog[itemId] ?? _fallback;

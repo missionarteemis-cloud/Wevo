@@ -99,7 +99,7 @@ class FurnitureSprite {
 
 /// Sprite avatar animati: per azione (`idle`/`walk`…) tiene il **foglio
 /// sorgente** + geometria, e ne costruisce gli sprite per (direzione, frame).
-/// Sa produrre una variante **ricolorata** (felpa) con la stessa geometria.
+/// Sa produrre una variante **ricolorata** (felpa/pelle) con la stessa geometria.
 class AvatarSprites {
   AvatarSprites._({
     required this.frameSize,

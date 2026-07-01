@@ -89,6 +89,17 @@ const catalog = [
     assetRef: 'fridge_pixel_1x1',
   },
   {
+    itemId: 'kookino_1x1',
+    name: 'Kookino',
+    description: 'Un tenero Yorkshire che veglia sulla stanza.',
+    price: 95,
+    type: 'arredi',
+    footprint: { w: 1, h: 1 },
+    rotatable: false,
+    interaction: 'none',
+    assetRef: 'kookino_1x1',
+  },
+  {
     itemId: 'coins_pack_small',
     name: 'Coins Pack S',
     description: 'Placeholder store item per il tab crediti.',

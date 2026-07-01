@@ -31,5 +31,6 @@
   "bed_loft_3x1":   { "type": "furniture", "sheet": "sprites/bed_loft_3x1.png",   "anchor": [96, 80] },
   "arcade_duo_2x2": { "type": "furniture", "sheet": "sprites/arcade_duo_2x2.png", "anchor": [64, 96] },
   "neon_rug_3x2":   { "type": "furniture", "sheet": "sprites/neon_rug_3x2.png",   "anchor": [96, 64] },
-  "fridge_pixel_1x1":{ "type": "furniture","sheet": "sprites/fridge_pixel_1x1.png","anchor": [32, 64] }
+  "fridge_pixel_1x1":{ "type": "furniture","sheet": "sprites/fridge_pixel_1x1.png","anchor": [32, 64] },
+  "kookino_1x1":     { "type": "furniture", "sheet": "sprites/kookino.png", "anchor": [32, 58] }
 }
